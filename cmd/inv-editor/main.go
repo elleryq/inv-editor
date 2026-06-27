@@ -40,7 +40,7 @@ TUI CONTROLS
   ?                 Toggle help overlay
 
 SERVE FLAGS
-  --host string     Address to listen on (default "0.0.0.0")
+  --host string     Address to listen on (default "127.0.0.1")
   --port int        Port to listen on (default 8080)
   --readonly        Start in read-only mode (mutations return 403)
 
