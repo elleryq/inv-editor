@@ -1,8 +1,5 @@
 # Build output
-/inv-editor
-
-# Test artifacts
-/tmp/
+build/
 
 # Editor / OS
 .DS_Store

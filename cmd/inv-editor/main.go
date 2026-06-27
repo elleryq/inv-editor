@@ -48,7 +48,8 @@ EXAMPLES
   inv-editor vc8.ini
   inv-editor new-inventory.yaml
   inv-editor serve vc8.yaml --port 9090
-  inv-editor serve vc8.yaml --host 127.0.0.1 --readonly
+  inv-editor serve vc8.yaml --host 127.0.0.1
+  inv-editor serve vc8.yaml --host 0.0.0.0 --readonly
 
 SUPPORTED FORMATS
   Read/write: INI (.ini, .cfg)  |  YAML (.yml, .yaml)
@@ -88,7 +89,7 @@ func runTUI(filePath string) {
 
 func runServe(args []string) {
 	fs := flag.NewFlagSet("serve", flag.ExitOnError)
-	host := fs.String("host", "0.0.0.0", "address to listen on")
+	host := fs.String("host", "127.0.0.1", "address to listen on")
 	port := fs.Int("port", 8080, "port to listen on")
 	readonly := fs.Bool("readonly", false, "start in read-only mode")
 
