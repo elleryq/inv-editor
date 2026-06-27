@@ -16,12 +16,12 @@ Built with Go + [Bubble Tea](https://github.com/charmbracelet/bubbletea).
 
 ```bash
 # Build from source
-git clone https://github.com/yourname/inv-editor
+git clone https://github.com/elleryq/inv-editor
 cd inv-editor
 go build -o inv-editor ./cmd/inv-editor
 
 # Or install directly
-go install github.com/yourname/inv-editor@latest
+go install github.com/elleryq/inv-editor@latest
 ```
 
 ## Usage
