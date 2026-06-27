@@ -1,0 +1,70 @@
+{{define "vars"}}
+<div class="panel-header">
+  <span class="panel-title">Variables</span>
+  {{if .VarSubject}}
+  <span class="ctx-badge">{{if eq .VarCtx "group"}}group{{else}}host{{end}}</span>
+  <span style="color:var(--accent);font-size:12px">{{.VarSubject}}</span>
+  {{else}}
+  <span style="color:var(--dim);font-size:12px">select group vars (≡) or click a host</span>
+  {{end}}
+</div>
+<div class="item-list" style="padding:0">
+  {{if .Vars}}
+  <table class="var-table">
+    <tbody>
+    {{range .Vars}}
+    <tr>
+      <td>{{.Key}}</td>
+      <td>{{.Value}}</td>
+      {{if not $.ReadOnly}}
+      <td>
+        <button class="btn-icon" title="edit"
+          onclick="editVar('{{.Key}}','{{.Value}}')">✎</button>
+        <form method="POST" action="/api/vars/delete"
+              onsubmit="return confirm('Delete var \'{{.Key}}\'?')"
+              style="display:inline">
+          <input type="hidden" name="ctx"       value="{{$.VarCtx}}">
+          <input type="hidden" name="subject"   value="{{$.VarSubject}}">
+          <input type="hidden" name="key"       value="{{.Key}}">
+          <input type="hidden" name="ctx_group" value="{{$.SelectedGroup}}">
+          <input type="hidden" name="ctx_host"  value="{{$.SelectedHost}}">
+          <button type="submit" class="btn-icon danger">✕</button>
+        </form>
+      </td>
+      {{end}}
+    </tr>
+    {{end}}
+    </tbody>
+  </table>
+  {{else if .VarSubject}}
+  <div style="padding:12px;color:var(--dim);font-size:12px">No variables.</div>
+  {{end}}
+</div>
+{{if and (not .ReadOnly) .VarSubject}}
+<div class="panel-footer">
+  <details class="add-form" id="add-var-details">
+    <summary>Add / Edit variable</summary>
+    <form method="POST" action="/api/vars/set">
+      <input type="hidden" name="ctx"       value="{{.VarCtx}}">
+      <input type="hidden" name="subject"   value="{{.VarSubject}}">
+      <input type="hidden" name="ctx_group" value="{{.SelectedGroup}}">
+      <input type="hidden" name="ctx_host"  value="{{.SelectedHost}}">
+      <div class="form-row">
+        <input type="text" name="key"   id="var-key"   placeholder="key"   required>
+        <input type="text" name="value" id="var-value" placeholder="value">
+        <button type="submit" class="btn btn-primary btn-sm">Set</button>
+      </div>
+    </form>
+  </details>
+</div>
+<script>
+function editVar(key, value) {
+  var d = document.getElementById('add-var-details');
+  d.open = true;
+  document.getElementById('var-key').value = key;
+  document.getElementById('var-value').value = value;
+  document.getElementById('var-key').focus();
+}
+</script>
+{{end}}
+{{end}}

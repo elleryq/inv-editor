@@ -1,0 +1,96 @@
+{{define "groups"}}
+<div class="panel-header">
+  <span class="panel-title">Groups</span>
+</div>
+<div class="item-list">
+  {{range .Groups}}
+  <div class="item-row{{if .Selected}} selected{{end}}" style="padding-left:{{mul .Depth 16}}px">
+    {{if .HasChildren}}
+    <form method="POST" action="/api/groups/expand" style="display:contents">
+      <input type="hidden" name="group"     value="{{.Name}}">
+      <input type="hidden" name="ctx_group" value="{{$.SelectedGroup}}">
+      <input type="hidden" name="ctx_host"  value="{{$.SelectedHost}}">
+      <input type="hidden" name="ctx_vars"  value="{{$.VarCtx}}">
+      <button type="submit" class="expand-btn" title="toggle">{{if .Expanded}}▼{{else}}▶{{end}}</button>
+    </form>
+    {{else}}
+    <span class="expand-btn"> </span>
+    {{end}}
+    <a href="/?group={{urlEncode .Name}}" class="item-label" title="{{.Name}}">{{.Name}}</a>
+    {{if not $.ReadOnly}}
+    <div class="item-actions">
+      <a href="/?group={{urlEncode .Name}}&vars=group" class="btn-icon" title="group vars">≡</a>
+      <button class="btn-icon danger" title="delete"
+        onclick="confirmDeleteGroup('{{.Name}}')">✕</button>
+    </div>
+    {{end}}
+  </div>
+  {{end}}
+</div>
+{{if not .ReadOnly}}
+<div class="panel-footer">
+  <details class="add-form">
+    <summary>Add group</summary>
+    <form method="POST" action="/api/groups/add">
+      <input type="hidden" name="ctx_group" value="{{.SelectedGroup}}">
+      <input type="hidden" name="ctx_host"  value="{{.SelectedHost}}">
+      <input type="hidden" name="ctx_vars"  value="{{.VarCtx}}">
+      <div class="form-row">
+        <input type="text" name="name" placeholder="group name" required>
+        <select name="parent">
+          {{range .AllGroups}}<option value="{{.}}"{{if eq . $.SelectedGroup}} selected{{end}}>{{.}}</option>{{end}}
+        </select>
+        <button type="submit" class="btn btn-primary btn-sm">Add</button>
+      </div>
+    </form>
+  </details>
+
+  <!-- Rename group inline form -->
+  <details class="add-form" id="rename-group-details">
+    <summary>Rename / Reparent selected group</summary>
+    {{if and .SelectedGroup (ne .SelectedGroup "all")}}
+    <form method="POST" action="/api/groups/rename">
+      <input type="hidden" name="ctx_group" value="{{.SelectedGroup}}">
+      <input type="hidden" name="ctx_host"  value="{{.SelectedHost}}">
+      <input type="hidden" name="ctx_vars"  value="{{.VarCtx}}">
+      <input type="hidden" name="name"      value="{{.SelectedGroup}}">
+      <div class="form-row">
+        <input type="text" name="newname" value="{{.SelectedGroup}}" required>
+        <button type="submit" class="btn btn-primary btn-sm">Rename</button>
+      </div>
+    </form>
+    <form method="POST" action="/api/groups/reparent" style="margin-top:6px">
+      <input type="hidden" name="ctx_group" value="{{.SelectedGroup}}">
+      <input type="hidden" name="ctx_host"  value="{{.SelectedHost}}">
+      <input type="hidden" name="ctx_vars"  value="{{.VarCtx}}">
+      <input type="hidden" name="name"      value="{{.SelectedGroup}}">
+      <div class="form-row">
+        <select name="parent">
+          <option value="">(top level)</option>
+          {{range .AllGroups}}<option value="{{.}}">{{.}}</option>{{end}}
+        </select>
+        <button type="submit" class="btn btn-sm">Move under</button>
+      </div>
+    </form>
+    {{else}}
+    <div style="color:var(--dim);font-size:12px;padding:4px">Select a non-root group first.</div>
+    {{end}}
+  </details>
+
+  <!-- Hidden delete form -->
+  <form method="POST" action="/api/groups/delete" id="delete-group-form" style="display:none">
+    <input type="hidden" name="ctx_group" value="{{.SelectedGroup}}">
+    <input type="hidden" name="ctx_host"  value="{{.SelectedHost}}">
+    <input type="hidden" name="ctx_vars"  value="{{.VarCtx}}">
+    <input type="hidden" name="name"      id="delete-group-name">
+  </form>
+  <script>
+  function confirmDeleteGroup(name) {
+    if (!confirm('Delete group "' + name + '"? (children will be reparented)')) return;
+    document.getElementById('delete-group-name').value = name;
+    document.getElementById('delete-group-form').submit();
+  }
+  </script>
+</div>
+{{end}}
+{{end}}

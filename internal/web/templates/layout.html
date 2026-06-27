@@ -1,0 +1,49 @@
+{{define "page"}}<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>inv-editor{{if .FilePath}} — {{.FilePath}}{{end}}</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<header>
+  <span class="title">inv-editor: {{.FilePath}}</span>
+  {{if .ReadOnly}}<span class="badge badge-ro">read-only</span>{{end}}
+  {{if .Modified}}<span class="badge badge-mod">modified</span>{{end}}
+  <a href="/download" class="btn" title="Download as YAML">⬇ YAML</a>
+  {{if not .ReadOnly}}
+  <form method="POST" action="/api/save" style="display:contents">
+    <input type="hidden" name="ctx_group" value="{{.SelectedGroup}}">
+    <input type="hidden" name="ctx_host"  value="{{.SelectedHost}}">
+    <input type="hidden" name="ctx_vars"  value="{{.VarCtx}}">
+    <button type="submit" class="btn btn-primary">💾 Save</button>
+  </form>
+  {{end}}
+</header>
+
+{{if .Status}}
+<div class="status-bar{{if hasErr .Status}} err{{end}}">{{.Status}}</div>
+{{end}}
+
+<main>
+  <!-- Groups panel (left) -->
+  <div class="panel" id="groups-panel">
+    {{template "groups" .}}
+  </div>
+
+  <!-- Right column: hosts + vars -->
+  <div class="right-col">
+    <div class="panel" id="hosts-panel">
+      {{template "hosts" .}}
+    </div>
+    <div class="panel" id="vars-panel">
+      {{template "vars" .}}
+    </div>
+  </div>
+</main>
+
+</body>
+</html>
+{{end}}

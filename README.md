@@ -27,12 +27,18 @@ go install github.com/elleryq/inv-editor@latest
 ## Usage
 
 ```bash
-# Open or create an inventory file
+# Terminal UI — open or create an inventory file
 inv-editor vc8.ini
 inv-editor production.yaml
 
 # If the file doesn't exist, starts with an empty inventory
 inv-editor new-inventory.ini
+
+# Web interface
+inv-editor serve vc8.yaml                        # default: 0.0.0.0:8080
+inv-editor serve vc8.yaml --port 9090
+inv-editor serve vc8.yaml --host 127.0.0.1       # local only
+inv-editor serve vc8.yaml --readonly              # read-only mode
 ```
 
 ## TUI Controls
@@ -130,16 +136,42 @@ vc8.ini ──(inv-editor 開啟)──▶ 按 x 匯出 YAML ──▶ vc8.yml
                                                之後只編輯此檔案
 ```
 
+## Web Interface
+
+Start the web server to browse and edit your inventory in a browser:
+
+```bash
+inv-editor serve vc8.yaml
+```
+
+Then open `http://localhost:8080`.
+
+| Feature | Description |
+|---------|-------------|
+| Three-panel layout | Groups tree (left) · Hosts (right top) · Variables (right bottom) |
+| Group tree | Expand/collapse subgroups; click to select |
+| Host management | Add, rename, delete, move, or copy hosts |
+| Variable editor | Inline add/edit/delete for group or host vars |
+| Save | Writes back to the original file in its original format |
+| Download YAML | `GET /download` — always returns YAML regardless of source format |
+| Read-only mode | `--readonly` flag hides all edit controls; mutations return 403 |
+
+> **Security note**: When listening on `0.0.0.0`, anyone on the network can access the editor. Use `--readonly` or `--host 127.0.0.1` if this is a concern.
+
 ## Project Structure
 
 ```
 inv-editor/
-├── cmd/inv-editor/     # Entry point
+├── cmd/inv-editor/     # Entry point (TUI + serve subcommand)
 ├── internal/
 │   ├── inventory/      # Data model + INI/YAML parser & writer
-│   └── tui/            # Bubble Tea UI (panels, dialogs, keybindings)
+│   ├── tui/            # Bubble Tea terminal UI
+│   └── web/            # HTTP server, handlers, templates, CSS
+│       ├── static/     # Embedded CSS
+│       └── templates/  # Embedded HTML templates
 ├── docs/
-│   └── SPEC.md         # Full functional specification
+│   ├── SPEC.md         # Full functional specification
+│   └── INVENTORY-GUIDELINE.md
 └── README.md
 ```
 

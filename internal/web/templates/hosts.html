@@ -1,0 +1,119 @@
+{{define "hosts"}}
+<div class="panel-header">
+  <span class="panel-title">Hosts</span>
+  <span style="color:var(--accent);font-size:12px">{{.SelectedGroup}}</span>
+  {{if and (not .ReadOnly) .SelectedGroup}}
+  <a href="/?group={{urlEncode .SelectedGroup}}&vars=group" class="btn btn-sm" title="group variables">≡ group vars</a>
+  {{end}}
+</div>
+<div class="item-list">
+  {{range .Hosts}}
+  <div class="item-row{{if eq . $.SelectedHost}} selected{{end}}">
+    <a href="/?group={{urlEncode $.SelectedGroup}}&host={{urlEncode .}}&vars=host"
+       class="item-label" title="{{.}}">{{.}}</a>
+    {{if not $.ReadOnly}}
+    <div class="item-actions">
+      {{/* rename */}}
+      <button class="btn-icon" title="rename"
+        onclick="showRename(this,'{{.}}')">✎</button>
+      {{/* move */}}
+      <button class="btn-icon" title="move to group"
+        onclick="showMove(this,'{{.}}','{{$.SelectedGroup}}')">⇄</button>
+      {{/* delete from group */}}
+      <form method="POST" action="/api/hosts/delete"
+            onsubmit="return confirm('Remove {{.}} from {{$.SelectedGroup}}?')"
+            style="display:contents">
+        <input type="hidden" name="name" value="{{.}}">
+        <input type="hidden" name="group" value="{{$.SelectedGroup}}">
+        <input type="hidden" name="completely" value="0">
+        <input type="hidden" name="ctx_group" value="{{$.SelectedGroup}}">
+        <input type="hidden" name="ctx_host"  value="{{$.SelectedHost}}">
+        <input type="hidden" name="ctx_vars"  value="{{$.VarCtx}}">
+        <button type="submit" class="btn-icon danger" title="remove from group">✕</button>
+      </form>
+    </div>
+    {{end}}
+  </div>
+  {{end}}
+</div>
+{{if not .ReadOnly}}
+<div class="panel-footer">
+  <details class="add-form">
+    <summary>Add host</summary>
+    <form method="POST" action="/api/hosts/add">
+      <input type="hidden" name="ctx_group" value="{{.SelectedGroup}}">
+      <input type="hidden" name="ctx_host"  value="{{.SelectedHost}}">
+      <input type="hidden" name="ctx_vars"  value="{{.VarCtx}}">
+      <input type="hidden" name="group" value="{{.SelectedGroup}}">
+      <div class="form-row">
+        <input type="text" name="name" placeholder="hostname" required>
+        <button type="submit" class="btn btn-primary btn-sm">Add</button>
+      </div>
+    </form>
+  </details>
+
+  <!-- Rename / Move dialogs (shown via JS below) -->
+  <div id="rename-host-form" style="display:none" class="action-row">
+    <form method="POST" action="/api/hosts/rename" id="rename-host-inner">
+      <input type="hidden" name="ctx_group" value="{{.SelectedGroup}}">
+      <input type="hidden" name="ctx_host"  value="{{.SelectedHost}}">
+      <input type="hidden" name="ctx_vars"  value="{{.VarCtx}}">
+      <input type="hidden" name="name" id="rename-host-old">
+      <div class="form-row">
+        <input type="text" name="newname" id="rename-host-new" placeholder="new hostname" required>
+        <button type="submit" class="btn btn-primary btn-sm">Rename</button>
+        <button type="button" class="btn btn-sm" onclick="document.getElementById('rename-host-form').style.display='none'">Cancel</button>
+      </div>
+    </form>
+  </div>
+
+  <div id="move-host-form" style="display:none" class="action-row">
+    <form method="POST" action="/api/hosts/move" id="move-host-inner">
+      <input type="hidden" name="ctx_group" value="{{.SelectedGroup}}">
+      <input type="hidden" name="ctx_host"  value="{{.SelectedHost}}">
+      <input type="hidden" name="ctx_vars"  value="{{.VarCtx}}">
+      <input type="hidden" name="name" id="move-host-name">
+      <input type="hidden" name="from" id="move-host-from">
+      <div class="form-row">
+        <span id="move-host-label" style="color:var(--dim);font-size:12px;align-self:center"></span>
+        <select name="to" id="move-host-to">
+          {{range .AllGroupNames}}<option value="{{.}}">{{.}}</option>{{end}}
+        </select>
+        <button type="submit" class="btn btn-primary btn-sm">Move</button>
+        <button type="button" class="btn btn-sm" onclick="document.getElementById('move-host-form').style.display='none'">Cancel</button>
+      </div>
+    </form>
+    <form method="POST" action="/api/hosts/copy" style="display:contents">
+      <input type="hidden" name="ctx_group" value="{{.SelectedGroup}}">
+      <input type="hidden" name="ctx_host"  value="{{.SelectedHost}}">
+      <input type="hidden" name="ctx_vars"  value="{{.VarCtx}}">
+      <input type="hidden" name="name" class="copy-name-sync">
+      <input type="hidden" name="to" class="copy-to-sync">
+      <button type="submit" class="btn btn-sm">Copy</button>
+    </form>
+  </div>
+</div>
+<script>
+function showRename(btn, name) {
+  document.getElementById('rename-host-form').style.display='flex';
+  document.getElementById('rename-host-old').value = name;
+  document.getElementById('rename-host-new').value = name;
+  document.getElementById('rename-host-new').focus();
+}
+function showMove(btn, name, fromGroup) {
+  document.getElementById('move-host-form').style.display='flex';
+  document.getElementById('move-host-name').value = name;
+  document.getElementById('move-host-from').value = fromGroup;
+  document.getElementById('move-host-label').textContent = name + ' →';
+  // sync copy fields
+  document.querySelectorAll('.copy-name-sync').forEach(el => el.value = name);
+  // sync to on select change
+  var sel = document.getElementById('move-host-to');
+  document.querySelectorAll('.copy-to-sync').forEach(el => el.value = sel.value);
+  sel.onchange = function() {
+    document.querySelectorAll('.copy-to-sync').forEach(el => el.value = sel.value);
+  };
+}
+</script>
+{{end}}
+{{end}}
