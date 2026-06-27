@@ -18,3 +18,7 @@ inv-editor
 !docs/*.yml
 !docs/*.yaml
 !docs/*.ini
+
+# Exception: GitHub Actions workflows
+!.github/
+!.github/**
