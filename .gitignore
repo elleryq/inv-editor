@@ -1,0 +1,20 @@
+# Build output
+inv-editor
+
+# Test artifacts
+/tmp/
+
+# Editor / OS
+.DS_Store
+*.swp
+*.swo
+
+# Inventory data files (user data, not part of the project)
+*.ini
+*.yml
+*.yaml
+
+# Exception: keep example files if added under docs/
+!docs/*.yml
+!docs/*.yaml
+!docs/*.ini

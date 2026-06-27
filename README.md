@@ -1,0 +1,156 @@
+# inv-editor
+
+A terminal-based interactive editor for Ansible inventory files.
+
+Built with Go + [Bubble Tea](https://github.com/charmbracelet/bubbletea).
+
+## Features
+
+- Create inventory from scratch or open an existing file
+- Support INI and YAML Ansible inventory formats
+- Manage groups, hosts, and variables with a keyboard-driven TUI
+- Export to any supported format
+- Single static binary, no dependencies
+
+## Installation
+
+```bash
+# Build from source
+git clone https://github.com/yourname/inv-editor
+cd inv-editor
+go build -o inv-editor ./cmd/inv-editor
+
+# Or install directly
+go install github.com/yourname/inv-editor@latest
+```
+
+## Usage
+
+```bash
+# Open or create an inventory file
+inv-editor vc8.ini
+inv-editor production.yaml
+
+# If the file doesn't exist, starts with an empty inventory
+inv-editor new-inventory.ini
+```
+
+## TUI Controls
+
+| Key | Action |
+|-----|--------|
+| `Tab` / `Shift+Tab` | Cycle between panels (Groups → Hosts → Variables) |
+| `G` / `H` / `V` | Jump directly to Groups / Hosts / Variables panel |
+| `↑` `↓` or `j` `k` | Navigate items in current panel |
+| `n` | New item (group, host, or variable) |
+| `e` / `Enter` | Edit selected item |
+| `d` / `Delete` | Delete selected item |
+| `m` | Move host to another group — removes from current (Hosts panel) |
+| `c` | Copy host to another group — keeps in current (Hosts panel) |
+| `M` | Move (reparent) group under a different parent (Groups panel) |
+| `v` | Open variables for selected group or host |
+| `s` | Save to original file |
+| `x` | Export to a different format/path |
+| `q` | Quit (Save & Quit / Discard / Cancel if unsaved changes) |
+| `?` | Toggle help overlay |
+
+## Screen Layout
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  inv-editor: vc8.ini  [modified]           Press ? for help │
+├───────────────────────┬─────────────────────────────────────┤
+│  GROUPS          [G]  │  HOSTS (webservers)            [H]  │
+│                       │                                     │
+│   all                 │   web01.example.com                 │
+│ > webservers          │ > web02.example.com                 │
+│   dbservers           │   web03.example.com                 │
+│   [+ New Group]       │   [+ New Host]                      │
+├───────────────────────┴─────────────────────────────────────┤
+│  VARIABLES  (web02.example.com)                        [V]  │
+│                                                             │
+│   ansible_user  = ubuntu                                    │
+│   ansible_port  = 22                                        │
+│   [+ New Variable]                                          │
+├─────────────────────────────────────────────────────────────┤
+│  Tab next panel │ n new │ e edit │ d del │ s save │ q quit  │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## Supported Formats
+
+### Read
+- `*.ini`, `*.cfg` — Ansible INI inventory
+- `*.yml`, `*.yaml` — Ansible YAML inventory
+
+### Write / Export
+- INI format
+- YAML format
+
+## INI vs YAML：格式選擇說明
+
+### 為什麼建議使用 YAML？
+
+YAML 格式天生支援「單一來源」（single source of truth）的管理原則：
+
+```yaml
+all:
+  hosts:
+    server1:
+      ansible_host: 10.11.21.1   # ← ansible_host 只定義在這裡
+  children:
+    webservers:
+      hosts:
+        server1: null             # ← 子群組只列名稱，不重複寫 IP
+```
+
+**inv-editor 的 YAML writer 遵循此原則**：存檔時自動將所有 host 的變數集中寫入 `all.hosts`，子群組只保留主機名稱。
+
+### INI 格式的限制
+
+INI 格式沒有獨立的 `all.hosts` 區段，host 變數只能寫在 section 裡：
+
+```ini
+[webservers]
+server1 ansible_host=10.11.21.1   # 只能寫在 group section 內
+
+[monitored]
+server1                            # 省略 vars，靠 Ansible 合併
+```
+
+若同一台主機出現在多個 group，`ansible_host` 必須寫在其中一個 group（通常第一個），其餘省略。這在閱讀上不直觀，且沒有結構上的「集中位置」可對應 YAML 的 `all.hosts`。**INI 格式本身無法保證 single source of truth。**
+
+### 建議工作流程
+
+如果現有的是 INI 格式，建議一次性遷移到 YAML：
+
+```
+vc8.ini ──(inv-editor 開啟)──▶ 按 x 匯出 YAML ──▶ vc8.yml
+                                                       ↑
+                                               之後只編輯此檔案
+```
+
+## Project Structure
+
+```
+inv-editor/
+├── cmd/inv-editor/     # Entry point
+├── internal/
+│   ├── inventory/      # Data model + INI/YAML parser & writer
+│   └── tui/            # Bubble Tea UI (panels, dialogs, keybindings)
+├── docs/
+│   └── SPEC.md         # Full functional specification
+└── README.md
+```
+
+## Ansible Inventory Notes
+
+- `all` group is always present (Ansible built-in root group)
+- Subgroups (group-of-groups) are supported; navigate with `→`/`←` in the Groups panel
+- Variables panel shows host or group vars; press `v` on a group or host to open it
+- `group_vars/` / `host_vars/` directories are not supported (inline vars only)
+
+## License
+
+MIT License — free to use, modify, and distribute, including in commercial projects.
+See [LICENSE](LICENSE) for the full text.
