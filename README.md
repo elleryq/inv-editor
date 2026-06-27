@@ -18,7 +18,8 @@ Built with Go + [Bubble Tea](https://github.com/charmbracelet/bubbletea).
 # Build from source
 git clone https://github.com/elleryq/inv-editor
 cd inv-editor
-go build -o inv-editor ./cmd/inv-editor
+mkdir build
+go build -o build/inv-editor ./cmd/inv-editor
 
 # Or install directly
 go install github.com/elleryq/inv-editor@latest
@@ -35,10 +36,10 @@ inv-editor production.yaml
 inv-editor new-inventory.ini
 
 # Web interface
-inv-editor serve vc8.yaml                        # default: 0.0.0.0:8080
+inv-editor serve vc8.yaml                            # default: 127.0.0.1:8080
 inv-editor serve vc8.yaml --port 9090
-inv-editor serve vc8.yaml --host 127.0.0.1       # local only
-inv-editor serve vc8.yaml --readonly              # read-only mode
+inv-editor serve vc8.yaml --host 127.0.0.1           # local only
+inv-editor serve vc8.yaml --host 0.0.0.0 --readonly  # read-only mode
 ```
 
 ## TUI Controls
