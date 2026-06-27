@@ -9,6 +9,14 @@ import (
 )
 
 func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// when terminal is too small, only allow quit
+	if m.tooSmall {
+		if msg.String() == "q" || msg.String() == "ctrl+c" {
+			return m, tea.Quit
+		}
+		return m, nil
+	}
+
 	// quit dialog takes priority
 	if m.showQuitDialog {
 		return m.handleQuitDialogKey(msg)
@@ -75,13 +83,21 @@ func (m Model) handleGroupsKey(key string) (tea.Model, tea.Cmd) {
 	case "up", "k":
 		if m.groupIdx > 0 {
 			m.groupIdx--
+			m.groupHScroll = 0
+			m.ensureGroupVisible()
 			m.rebuildHosts()
 		}
 	case "down", "j":
 		if m.groupIdx < len(m.treeNodes)-1 {
 			m.groupIdx++
+			m.groupHScroll = 0
+			m.ensureGroupVisible()
 			m.rebuildHosts()
 		}
+	case "shift+right":
+		m.groupHScroll += hScrollStep
+	case "shift+left":
+		m.groupHScroll = max(0, m.groupHScroll-hScrollStep)
 	case "right", "l":
 		// expand current node if it has children
 		node := m.treeNodes[m.groupIdx]
@@ -108,6 +124,8 @@ func (m Model) handleGroupsKey(key string) (tea.Model, tea.Cmd) {
 					break
 				}
 			}
+			m.groupHScroll = 0
+			m.ensureGroupVisible()
 			m.rebuildHosts()
 		}
 	case "n":
@@ -160,6 +178,7 @@ func (m Model) handleGroupsKey(key string) (tea.Model, tea.Cmd) {
 			m.varCtx = varCtxGroup
 			m.varCtxName = m.currentGroupName()
 			m.varIdx = 0
+			m.varScroll = 0
 			m.rebuildVars()
 			m.focus = panelVars
 		}
@@ -178,11 +197,19 @@ func (m Model) handleHostsKey(key string) (tea.Model, tea.Cmd) {
 	case "up", "k":
 		if m.hostIdx > 0 {
 			m.hostIdx--
+			m.hostHScroll = 0
+			m.ensureHostVisible()
 		}
 	case "down", "j":
 		if m.hostIdx < len(m.hostNames)-1 {
 			m.hostIdx++
+			m.hostHScroll = 0
+			m.ensureHostVisible()
 		}
+	case "shift+right":
+		m.hostHScroll += hScrollStep
+	case "shift+left":
+		m.hostHScroll = max(0, m.hostHScroll-hScrollStep)
 	case "n":
 		m.startInput(inputNewHost, "New Host", []inputField{
 			{label: "Host address", placeholder: "e.g. 192.168.1.10 or web01.example.com"},
@@ -209,6 +236,7 @@ func (m Model) handleHostsKey(key string) (tea.Model, tea.Cmd) {
 			m.varCtx = varCtxHost
 			m.varCtxName = m.currentHostName()
 			m.varIdx = 0
+			m.varScroll = 0
 			m.rebuildVars()
 			m.focus = panelVars
 		}
@@ -234,11 +262,19 @@ func (m Model) handleVarsKey(key string) (tea.Model, tea.Cmd) {
 	case "up", "k":
 		if m.varIdx > 0 {
 			m.varIdx--
+			m.varHScroll = 0
+			m.ensureVarVisible()
 		}
 	case "down", "j":
 		if m.varIdx < len(m.varKeys)-1 {
 			m.varIdx++
+			m.varHScroll = 0
+			m.ensureVarVisible()
 		}
+	case "shift+right":
+		m.varHScroll += hScrollStep
+	case "shift+left":
+		m.varHScroll = max(0, m.varHScroll-hScrollStep)
 	case "n":
 		m.startInput(inputNewVar, "New Variable", []inputField{
 			{label: "Key"},
@@ -380,6 +416,7 @@ func (m Model) commitInput() (tea.Model, tea.Cmd) {
 						break
 					}
 				}
+				m.ensureGroupVisible()
 				m.rebuildHosts()
 			}
 		}
@@ -401,6 +438,7 @@ func (m Model) commitInput() (tea.Model, tea.Cmd) {
 						break
 					}
 				}
+				m.ensureGroupVisible()
 			}
 		}
 	case inputNewHost:
@@ -416,6 +454,7 @@ func (m Model) commitInput() (tea.Model, tea.Cmd) {
 					break
 				}
 			}
+			m.ensureHostVisible()
 		}
 	case inputEditHost:
 		newName := strings.TrimSpace(m.inputFields[0].value)
@@ -436,6 +475,7 @@ func (m Model) commitInput() (tea.Model, tea.Cmd) {
 			}
 			m.modified = true
 			m.rebuildVars()
+			m.ensureVarVisible()
 		}
 	case inputEditVar:
 		oldKey := m.currentVarKey()
@@ -456,6 +496,7 @@ func (m Model) commitInput() (tea.Model, tea.Cmd) {
 			}
 			m.modified = true
 			m.rebuildVars()
+			m.ensureVarVisible()
 		}
 	case inputExportPath:
 		// field 0 = format toggle, field 1 = path
@@ -504,6 +545,7 @@ func (m Model) commitInput() (tea.Model, tea.Cmd) {
 					break
 				}
 			}
+			m.ensureGroupVisible()
 		} else {
 			m.statusMsg = fmt.Sprintf("Cannot move %q to %q (cycle or not found)", name, rawTarget)
 		}

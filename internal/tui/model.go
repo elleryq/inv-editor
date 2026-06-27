@@ -10,6 +10,12 @@ import (
 	"github.com/elleryq/inv-editor/internal/inventory"
 )
 
+const (
+	minWidth    = 80
+	minHeight   = 22
+	hScrollStep = 4
+)
+
 type panel int
 
 const (
@@ -71,8 +77,19 @@ type Model struct {
 	varKeys   []string // vars for current varCtx entity
 
 	// terminal size
-	width  int
-	height int
+	width    int
+	height   int
+	tooSmall bool
+
+	// vertical scroll offsets (first visible item index in each panel)
+	groupScroll int
+	hostScroll  int
+	varScroll   int
+
+	// horizontal scroll offsets (visual columns shifted left in each panel)
+	groupHScroll int
+	hostHScroll  int
+	varHScroll   int
 
 	// input dialog
 	inputMode    inputDialogMode
@@ -178,6 +195,7 @@ func (m *Model) rebuildGroups() {
 	if m.groupIdx >= len(m.treeNodes) {
 		m.groupIdx = max(0, len(m.treeNodes)-1)
 	}
+	m.ensureGroupVisible()
 	m.rebuildHosts()
 }
 
@@ -185,6 +203,7 @@ func (m *Model) rebuildHosts() {
 	if len(m.treeNodes) == 0 {
 		m.hostNames = nil
 		m.hostIdx = 0
+		m.hostScroll = 0
 		return
 	}
 	hosts := m.inv.HostsInGroup(m.currentGroupName())
@@ -195,6 +214,7 @@ func (m *Model) rebuildHosts() {
 	if m.hostIdx >= len(m.hostNames) {
 		m.hostIdx = max(0, len(m.hostNames)-1)
 	}
+	m.hostScroll = 0
 }
 
 func (m *Model) rebuildVars() {
@@ -218,6 +238,74 @@ func (m *Model) rebuildVars() {
 	}
 	if m.varIdx >= len(m.varKeys) {
 		m.varIdx = max(0, len(m.varKeys)-1)
+	}
+}
+
+// ----- viewport helpers -----
+
+func (m *Model) groupsVisibleRows() int {
+	if m.height == 0 {
+		return 10
+	}
+	availH := m.height - 2 // header(1) + statusbar(1)
+	topH := availH * 2 / 3
+	// h param = topH-2; visible = h − title(1) − separator(1) − [+New](1)
+	rows := (topH - 2) - 3
+	if rows < 1 {
+		return 1
+	}
+	return rows
+}
+
+func (m *Model) hostsVisibleRows() int { return m.groupsVisibleRows() }
+
+func (m *Model) varsVisibleRows() int {
+	if m.height == 0 {
+		return 5
+	}
+	availH := m.height - 2
+	topH := availH * 2 / 3
+	botH := availH - topH
+	rows := (botH - 2) - 3
+	if rows < 1 {
+		return 1
+	}
+	return rows
+}
+
+func (m *Model) ensureGroupVisible() {
+	visible := m.groupsVisibleRows()
+	if maxS := max(0, len(m.treeNodes)-visible); m.groupScroll > maxS {
+		m.groupScroll = maxS
+	}
+	if m.groupIdx < m.groupScroll {
+		m.groupScroll = m.groupIdx
+	} else if m.groupIdx >= m.groupScroll+visible {
+		m.groupScroll = m.groupIdx - visible + 1
+	}
+}
+
+func (m *Model) ensureHostVisible() {
+	visible := m.hostsVisibleRows()
+	if maxS := max(0, len(m.hostNames)-visible); m.hostScroll > maxS {
+		m.hostScroll = maxS
+	}
+	if m.hostIdx < m.hostScroll {
+		m.hostScroll = m.hostIdx
+	} else if m.hostIdx >= m.hostScroll+visible {
+		m.hostScroll = m.hostIdx - visible + 1
+	}
+}
+
+func (m *Model) ensureVarVisible() {
+	visible := m.varsVisibleRows()
+	if maxS := max(0, len(m.varKeys)-visible); m.varScroll > maxS {
+		m.varScroll = maxS
+	}
+	if m.varIdx < m.varScroll {
+		m.varScroll = m.varIdx
+	} else if m.varIdx >= m.varScroll+visible {
+		m.varScroll = m.varIdx - visible + 1
 	}
 }
 
@@ -271,6 +359,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		m.tooSmall = msg.Width < minWidth || msg.Height < minHeight
 		return m, nil
 	case tea.KeyMsg:
 		return m.handleKey(msg)
@@ -281,6 +370,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m Model) View() string {
 	if m.width == 0 {
 		return "Loading..."
+	}
+	if m.tooSmall {
+		return fmt.Sprintf(
+			"\n  Terminal too small: %d×%d\n  Minimum required:  %d×%d\n\n  Resize the terminal, or press q to quit.",
+			m.width, m.height, minWidth, minHeight,
+		)
 	}
 
 	main := m.viewMain()
@@ -311,9 +406,11 @@ func (m Model) viewMain() string {
 	leftW := m.width / 3
 	rightW := m.width - leftW
 
-	groupsPanel := m.viewGroupsPanel(leftW-2, topH-2)
-	hostsPanel := m.viewHostsPanel(rightW-2, topH-2)
-	varsPanel := m.viewVarsPanel(m.width-2, botH-2)
+	// stylePanel has Border(1 each side) + Padding(0,1 each side) = 4 overhead.
+	// Pass content width (w - 4) so rendered panel total equals leftW / rightW / m.width.
+	groupsPanel := m.viewGroupsPanel(leftW-4, topH-2)
+	hostsPanel := m.viewHostsPanel(rightW-4, topH-2)
+	varsPanel := m.viewVarsPanel(m.width-4, botH-2)
 
 	top := lipgloss.JoinHorizontal(lipgloss.Top, groupsPanel, hostsPanel)
 	body := lipgloss.JoinVertical(lipgloss.Left, top, varsPanel)
@@ -356,19 +453,25 @@ func (m Model) viewGroupsPanel(w, h int) string {
 	active := m.focus == panelGroups
 	title := panelTitle("GROUPS", "G", active)
 
-	lines := make([]string, 0, len(m.treeNodes)+1)
-	for i, node := range m.treeNodes {
+	visible := max(1, h-3) // h − title(1) − separator(1) − [+New](1)
+	scroll := m.groupScroll
+	end := min(scroll+visible, len(m.treeNodes))
+
+	lines := make([]string, 0, visible+1)
+	for i := scroll; i < end; i++ {
+		node := m.treeNodes[i]
 		indent := strings.Repeat("  ", node.depth)
 		var icon string
 		switch {
 		case node.hasChildren && node.expanded:
-			icon = "▼ "
+			icon = "- "
 		case node.hasChildren:
-			icon = "▶ "
+			icon = "+ "
 		default:
 			icon = "  "
 		}
-		label := indent + icon + node.name
+		// 1 col reserved for the ">" / " " prefix
+		label := panelLineView(indent+icon+node.name, m.groupHScroll, w-1)
 		if i == m.groupIdx {
 			if active {
 				lines = append(lines, styleSelected.Render(">"+label))
@@ -389,9 +492,15 @@ func (m Model) viewHostsPanel(w, h int) string {
 	groupName := m.currentGroupName()
 	title := panelTitle(fmt.Sprintf("HOSTS (%s)", groupName), "H", active)
 
-	lines := make([]string, 0, len(m.hostNames)+1)
-	for i, name := range m.hostNames {
-		line := name
+	visible := max(1, h-3) // h − title(1) − separator(1) − [+New](1)
+	scroll := m.hostScroll
+	end := min(scroll+visible, len(m.hostNames))
+
+	lines := make([]string, 0, visible+1)
+	for i := scroll; i < end; i++ {
+		// 2 cols reserved for "> " / "  " prefix
+		name := panelLineView(m.hostNames[i], m.hostHScroll, w-2)
+		var line string
 		if i == m.hostIdx {
 			if active {
 				line = styleSelected.Render("> " + name)
@@ -422,8 +531,13 @@ func (m Model) viewVarsPanel(w, h int) string {
 	}
 	title := panelTitle(fmt.Sprintf("VARIABLES (%s)", ctxLabel), "V", active)
 
-	lines := make([]string, 0, len(m.varKeys)+1)
-	for i, k := range m.varKeys {
+	visible := max(1, h-3) // h − title(1) − separator(1) − [+New](1)
+	scroll := m.varScroll
+	end := min(scroll+visible, len(m.varKeys))
+
+	lines := make([]string, 0, visible+1)
+	for i := scroll; i < end; i++ {
+		k := m.varKeys[i]
 		var val string
 		switch m.varCtx {
 		case varCtxGroup:
@@ -435,7 +549,8 @@ func (m Model) viewVarsPanel(w, h int) string {
 				val = h.Vars[k]
 			}
 		}
-		entry := fmt.Sprintf("%s = %s", k, val)
+		// 2 cols reserved for "> " / "  " prefix
+		entry := panelLineView(fmt.Sprintf("%s = %s", k, val), m.varHScroll, w-2)
 		if i == m.varIdx {
 			if active {
 				entry = styleSelected.Render("> " + entry)
@@ -465,8 +580,8 @@ func (m Model) viewInputDialog() string {
 		active := i == m.inputFocused
 		if f.isToggle {
 			val := f.toggleOpts[f.toggleIdx]
-			left := styleDim.Render("◀")
-			right := styleDim.Render("▶")
+			left := styleDim.Render("<")
+			right := styleDim.Render(">")
 			if active {
 				sb.WriteString(fmt.Sprintf("%s %s %s %s\n",
 					styleSelected.Render(label),
@@ -478,7 +593,7 @@ func (m Model) viewInputDialog() string {
 		} else {
 			val := f.value
 			if active {
-				val = val + "█"
+				val = val + "_"
 				sb.WriteString(fmt.Sprintf("%s [%s]\n", styleSelected.Render(label), val))
 			} else {
 				sb.WriteString(fmt.Sprintf("%s [%s]\n", label, styleDim.Render(val)))
@@ -525,32 +640,33 @@ func (m Model) viewConfirmDialog() string {
 
 func (m Model) viewHelp() string {
 	help := `NAVIGATION
-  Tab / Shift+Tab   cycle panels
-  G / H / V         jump to panel
-  ↑ ↓  or  j k      move cursor
+  Tab / Shift+Tab      cycle panels
+  G / H / V            jump to panel
+  ↑ ↓  or  j k         move cursor
+  Shift+← →            scroll panel left / right
 
 GROUPS PANEL
-  → / l             expand subgroups
-  ← / h             collapse / jump to parent
-  n                 new group (choose parent in dialog)
-  e / Enter         rename group
-  M                 move group (reparent)
-  d / Delete        delete group (children re-parented)
-  v                 open group variables
+  → / l                expand subgroups
+  ← / h                collapse / jump to parent
+  n                    new group (choose parent in dialog)
+  e / Enter            rename group
+  M                    move group (reparent)
+  d / Delete           delete group (children re-parented)
+  v                    open group variables
 
 HOSTS PANEL
-  n                 new host
-  e / Enter         rename host
-  m                 move host to another group (removes here)
-  c                 copy host to another group (keeps here)
-  d / Delete        remove host from this group
-  v                 open host variables
+  n                    new host
+  e / Enter            rename host
+  m                    move host to another group (removes here)
+  c                    copy host to another group (keeps here)
+  d / Delete           remove host from this group
+  v                    open host variables
 
 FILE
   s  save   x  export   q  quit
 
 Press any key to close`
-	return dialogBox(help, 52)
+	return dialogBox(help, 56)
 }
 
 // --- helpers ---
@@ -564,21 +680,30 @@ func panelTitle(label, key string, active bool) string {
 }
 
 func renderPanel(title string, lines []string, w, h int, active bool) string {
-	inner := title + "\n" + strings.Repeat("─", w) + "\n"
-	for _, l := range lines {
-		inner += l + "\n"
+	// Build row slice: title, separator, then item lines.
+	rows := make([]string, 0, h)
+	rows = append(rows, title)
+	rows = append(rows, strings.Repeat("─", w))
+	rows = append(rows, lines...)
+
+	// Hard-clip or pad to exactly h rows so lipgloss never needs to guess.
+	// Clip from the bottom — title is always rows[0] and stays visible.
+	if len(rows) > h {
+		rows = rows[:h]
 	}
-	// pad to height
-	used := strings.Count(inner, "\n")
-	for used < h {
-		inner += "\n"
-		used++
+	for len(rows) < h {
+		rows = append(rows, "")
 	}
+
 	s := stylePanel
 	if active {
 		s = stylePanelActive
 	}
-	return s.Width(w).Height(h).Render(inner)
+	// stylePanel has Padding(0,1): lipgloss .Width() budgets content+padding
+	// together, so pass w+2 to give the text rows (already sized to w) their
+	// 1-col padding on each side without lipgloss wrapping the overflow onto
+	// an extra row.
+	return s.Width(w + 2).Height(h).Render(strings.Join(rows, "\n"))
 }
 
 func dialogBox(content string, w int) string {
@@ -661,4 +786,79 @@ func max(a, b int) int {
 		return a
 	}
 	return b
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+// panelLineView returns the visible slice of plain-text s for a horizontal
+// viewport of maxCols visual columns starting at visual column hScroll.
+// Uses only ASCII 1-col indicators: '<' (hidden content left), '>' (right).
+// All indicator characters are unambiguously 1 visual column wide in every locale.
+func panelLineView(s string, hScroll, maxCols int) string {
+	if maxCols <= 0 {
+		return ""
+	}
+	if hScroll <= 0 {
+		// No scroll: truncate to maxCols with '>' indicator if cut.
+		if lipgloss.Width(s) <= maxCols {
+			return s
+		}
+		runes := []rune(s)
+		w := 0
+		for i, r := range runes {
+			rw := lipgloss.Width(string(r))
+			if w+rw > maxCols-1 {
+				return string(runes[:i]) + ">"
+			}
+			w += rw
+		}
+		return s
+	}
+
+	// Scrolled right: skip hScroll visual columns from the left.
+	runes := []rune(s)
+	col := 0
+	startIdx := len(runes) // default: fully scrolled past end
+	for i, r := range runes {
+		if col >= hScroll {
+			startIdx = i
+			break
+		}
+		col += lipgloss.Width(string(r))
+	}
+
+	avail := maxCols - 1 // reserve 1 col for leading '<'
+
+	var viewRunes []rune
+	viewW := 0
+	hasRight := false
+	for _, r := range runes[startIdx:] {
+		rw := lipgloss.Width(string(r))
+		if viewW+rw > avail {
+			hasRight = true
+			break
+		}
+		viewRunes = append(viewRunes, r)
+		viewW += rw
+	}
+
+	if hasRight {
+		// Reserve 1 more col for trailing '>'.
+		for viewW > avail-1 && len(viewRunes) > 0 {
+			removed := viewRunes[len(viewRunes)-1]
+			viewRunes = viewRunes[:len(viewRunes)-1]
+			viewW -= lipgloss.Width(string(removed))
+		}
+	}
+
+	result := "<" + string(viewRunes)
+	if hasRight {
+		result += ">"
+	}
+	return result
 }

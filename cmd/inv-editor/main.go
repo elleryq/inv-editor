@@ -26,6 +26,7 @@ TUI CONTROLS
   Tab / Shift+Tab   Cycle between panels (Groups → Hosts → Variables)
   G / H / V         Jump to Groups / Hosts / Variables panel
   ↑ ↓  or  j k      Navigate items
+  Shift+← →         Scroll panel left / right (horizontal)
   n                 New item (group, host, or variable)
   e / Enter         Edit selected item
   d / Delete        Delete selected item
