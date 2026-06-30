@@ -9,6 +9,9 @@
 <div class="item-list">
   {{range .Hosts}}
   <div class="item-row{{if eq . $.SelectedHost}} selected{{end}}">
+    {{if not $.ReadOnly}}
+    <input type="checkbox" name="hosts" value="{{.}}" form="hosts-bulk-form" class="host-checkbox">
+    {{end}}
     <a href="/?group={{urlEncode $.SelectedGroup}}&host={{urlEncode .}}&vars=host"
        class="item-label" title="{{.}}">{{.}}</a>
     {{if not $.ReadOnly}}
@@ -16,9 +19,6 @@
       {{/* rename */}}
       <button class="btn-icon" title="rename"
         onclick="showRename(this,'{{.}}')">✎</button>
-      {{/* move */}}
-      <button class="btn-icon" title="move to group"
-        onclick="showMove(this,'{{.}}','{{$.SelectedGroup}}')">⇄</button>
       {{/* delete from group */}}
       <form method="POST" action="/api/hosts/delete"
             onsubmit="return confirm('Remove {{.}} from {{$.SelectedGroup}}?')"
@@ -47,12 +47,13 @@
       <input type="hidden" name="group" value="{{.SelectedGroup}}">
       <div class="form-row">
         <input type="text" name="name" placeholder="hostname" required>
+        <input type="text" name="ip" placeholder="IP (ansible_host, optional)">
         <button type="submit" class="btn btn-primary btn-sm">Add</button>
       </div>
     </form>
   </details>
 
-  <!-- Rename / Move dialogs (shown via JS below) -->
+  <!-- Rename dialog (shown via JS below) -->
   <div id="rename-host-form" style="display:none" class="action-row">
     <form method="POST" action="/api/hosts/rename" id="rename-host-inner">
       <input type="hidden" name="ctx_group" value="{{.SelectedGroup}}">
@@ -67,29 +68,22 @@
     </form>
   </div>
 
-  <div id="move-host-form" style="display:none" class="action-row">
-    <form method="POST" action="/api/hosts/move" id="move-host-inner">
+  <!-- Bulk move/copy — web equivalent of the TUI's space-select + c/m + p
+       clipboard flow. Checkboxes above are wired to this form via form="hosts-bulk-form". -->
+  <div class="action-row">
+    <form id="hosts-bulk-form" method="POST">
       <input type="hidden" name="ctx_group" value="{{.SelectedGroup}}">
       <input type="hidden" name="ctx_host"  value="{{.SelectedHost}}">
       <input type="hidden" name="ctx_vars"  value="{{.VarCtx}}">
-      <input type="hidden" name="name" id="move-host-name">
-      <input type="hidden" name="from" id="move-host-from">
+      <input type="hidden" name="from" value="{{.SelectedGroup}}">
       <div class="form-row">
-        <span id="move-host-label" style="color:var(--dim);font-size:12px;align-self:center"></span>
-        <select name="to" id="move-host-to">
-          {{range .AllGroupNames}}<option value="{{.}}">{{.}}</option>{{end}}
+        <span style="color:var(--dim);font-size:12px;align-self:center">selected →</span>
+        <select name="to">
+          {{range .AllGroupNames}}{{if ne . $.SelectedGroup}}<option value="{{.}}">{{.}}</option>{{end}}{{end}}
         </select>
-        <button type="submit" class="btn btn-primary btn-sm">Move</button>
-        <button type="button" class="btn btn-sm" onclick="document.getElementById('move-host-form').style.display='none'">Cancel</button>
+        <button type="submit" formaction="/api/hosts/move-bulk" class="btn btn-primary btn-sm" title="remove from current group">Move</button>
+        <button type="submit" formaction="/api/hosts/copy-bulk" class="btn btn-sm" title="keep in current group">Copy</button>
       </div>
-    </form>
-    <form method="POST" action="/api/hosts/copy" style="display:contents">
-      <input type="hidden" name="ctx_group" value="{{.SelectedGroup}}">
-      <input type="hidden" name="ctx_host"  value="{{.SelectedHost}}">
-      <input type="hidden" name="ctx_vars"  value="{{.VarCtx}}">
-      <input type="hidden" name="name" class="copy-name-sync">
-      <input type="hidden" name="to" class="copy-to-sync">
-      <button type="submit" class="btn btn-sm">Copy</button>
     </form>
   </div>
 </div>
@@ -99,20 +93,6 @@ function showRename(btn, name) {
   document.getElementById('rename-host-old').value = name;
   document.getElementById('rename-host-new').value = name;
   document.getElementById('rename-host-new').focus();
-}
-function showMove(btn, name, fromGroup) {
-  document.getElementById('move-host-form').style.display='flex';
-  document.getElementById('move-host-name').value = name;
-  document.getElementById('move-host-from').value = fromGroup;
-  document.getElementById('move-host-label').textContent = name + ' →';
-  // sync copy fields
-  document.querySelectorAll('.copy-name-sync').forEach(el => el.value = name);
-  // sync to on select change
-  var sel = document.getElementById('move-host-to');
-  document.querySelectorAll('.copy-to-sync').forEach(el => el.value = sel.value);
-  sel.onchange = function() {
-    document.querySelectorAll('.copy-to-sync').forEach(el => el.value = sel.value);
-  };
 }
 </script>
 {{end}}

@@ -375,6 +375,35 @@ func (s *Server) handleReparentGroup(w http.ResponseWriter, r *http.Request) {
 	redirectBack(w, r, ctxGroup, ctxHost, ctxVars, "group '"+name+"' moved")
 }
 
+// handleCopyGroupDeep deep-copies a group (subgroups, member hosts, vars)
+// under a target parent as a new group — the web equivalent of the TUI's
+// c + p clipboard flow for groups. If newname is blank, a non-colliding
+// name is generated automatically.
+func (s *Server) handleCopyGroupDeep(w http.ResponseWriter, r *http.Request) {
+	if s.guardWrite(w) {
+		return
+	}
+	name := r.FormValue("name")
+	parent := r.FormValue("parent")
+	newName := strings.TrimSpace(r.FormValue("newname"))
+	ctxGroup, ctxHost, ctxVars := s.currentCtx(r)
+
+	s.mu.Lock()
+	if newName == "" {
+		newName = s.inv.UniqueGroupName(name)
+	}
+	got := s.inv.CopyGroupDeep(name, parent, newName)
+	if got != "" {
+		s.modified = true
+	}
+	s.mu.Unlock()
+	if got == "" {
+		redirectBack(w, r, ctxGroup, ctxHost, ctxVars, "cannot copy '"+name+"' — name '"+newName+"' already in use")
+		return
+	}
+	redirectBack(w, r, got, ctxHost, ctxVars, "group '"+name+"' copied to '"+got+"'")
+}
+
 // ----- host handlers -----
 
 func (s *Server) handleAddHost(w http.ResponseWriter, r *http.Request) {
@@ -382,6 +411,7 @@ func (s *Server) handleAddHost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	hostName := strings.TrimSpace(r.FormValue("name"))
+	ip := strings.TrimSpace(r.FormValue("ip"))
 	group := r.FormValue("group")
 	ctxGroup, ctxHost, ctxVars := s.currentCtx(r)
 
@@ -400,6 +430,9 @@ func (s *Server) handleAddHost(w http.ResponseWriter, r *http.Request) {
 	}
 	if ok {
 		s.modified = true
+		if ip != "" {
+			s.inv.SetHostVar(hostName, "ansible_host", ip)
+		}
 	}
 	s.mu.Unlock()
 	if !ok {
@@ -463,47 +496,70 @@ func (s *Server) handleDeleteHost(w http.ResponseWriter, r *http.Request) {
 	redirectBack(w, r, ctxGroup, newHost, "", "host '"+hostName+"' deleted")
 }
 
-func (s *Server) handleMoveHost(w http.ResponseWriter, r *http.Request) {
+// handleBulkMoveHosts moves every selected host from "from" to "to" —
+// the web equivalent of the TUI's space-select + m + p clipboard flow.
+func (s *Server) handleBulkMoveHosts(w http.ResponseWriter, r *http.Request) {
 	if s.guardWrite(w) {
 		return
 	}
-	hostName := r.FormValue("name")
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	hostNames := r.Form["hosts"]
 	fromGroup := r.FormValue("from")
 	toGroup := r.FormValue("to")
 	ctxGroup, ctxHost, ctxVars := s.currentCtx(r)
 
+	if len(hostNames) == 0 {
+		redirectBack(w, r, ctxGroup, ctxHost, ctxVars, "no hosts selected")
+		return
+	}
 	s.mu.Lock()
-	ok := s.inv.MoveHost(hostName, fromGroup, toGroup)
-	if ok {
+	count := 0
+	for _, h := range hostNames {
+		if s.inv.MoveHost(h, fromGroup, toGroup) {
+			count++
+		}
+	}
+	if count > 0 {
 		s.modified = true
 	}
 	s.mu.Unlock()
-	if !ok {
-		redirectBack(w, r, ctxGroup, ctxHost, ctxVars, "cannot move '"+hostName+"'")
-		return
-	}
-	redirectBack(w, r, ctxGroup, ctxHost, ctxVars, "host '"+hostName+"' moved to '"+toGroup+"'")
+	redirectBack(w, r, ctxGroup, ctxHost, ctxVars, fmt.Sprintf("moved %d host(s) to '%s'", count, toGroup))
 }
 
-func (s *Server) handleCopyHost(w http.ResponseWriter, r *http.Request) {
+// handleBulkCopyHosts copies every selected host into "to", keeping them in
+// their source group — the web equivalent of the TUI's space-select + c + p
+// clipboard flow.
+func (s *Server) handleBulkCopyHosts(w http.ResponseWriter, r *http.Request) {
 	if s.guardWrite(w) {
 		return
 	}
-	hostName := r.FormValue("name")
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	hostNames := r.Form["hosts"]
 	toGroup := r.FormValue("to")
 	ctxGroup, ctxHost, ctxVars := s.currentCtx(r)
 
+	if len(hostNames) == 0 {
+		redirectBack(w, r, ctxGroup, ctxHost, ctxVars, "no hosts selected")
+		return
+	}
 	s.mu.Lock()
-	ok := s.inv.CopyHostToGroup(hostName, toGroup)
-	if ok {
+	count := 0
+	for _, h := range hostNames {
+		if s.inv.CopyHostToGroup(h, toGroup) {
+			count++
+		}
+	}
+	if count > 0 {
 		s.modified = true
 	}
 	s.mu.Unlock()
-	if !ok {
-		redirectBack(w, r, ctxGroup, ctxHost, ctxVars, "'"+hostName+"' already in '"+toGroup+"'")
-		return
-	}
-	redirectBack(w, r, ctxGroup, ctxHost, ctxVars, "host '"+hostName+"' copied to '"+toGroup+"'")
+	redirectBack(w, r, ctxGroup, ctxHost, ctxVars, fmt.Sprintf("copied %d host(s) to '%s'", count, toGroup))
 }
 
 func (s *Server) handleSelectHostVars(w http.ResponseWriter, r *http.Request) {
@@ -597,4 +653,31 @@ func (s *Server) handleSave(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleExport(w http.ResponseWriter, r *http.Request) {
 	http.Error(w, "not implemented", http.StatusNotImplemented)
+}
+
+// handleImport merges another inventory file (read from the server's
+// filesystem, same as the file this server was started with) into the
+// currently open one, matching groups/hosts by name.
+func (s *Server) handleImport(w http.ResponseWriter, r *http.Request) {
+	if s.guardWrite(w) {
+		return
+	}
+	path := strings.TrimSpace(r.FormValue("path"))
+	ctxGroup, ctxHost, ctxVars := s.currentCtx(r)
+
+	if path == "" {
+		redirectBack(w, r, ctxGroup, ctxHost, ctxVars, "import path cannot be empty")
+		return
+	}
+	other, _, err := inventory.Load(path)
+	if err != nil {
+		redirectBack(w, r, ctxGroup, ctxHost, ctxVars, "import failed: "+err.Error())
+		return
+	}
+	s.mu.Lock()
+	newGroups, newHosts := s.inv.MergeFrom(other)
+	s.modified = true
+	s.mu.Unlock()
+	redirectBack(w, r, ctxGroup, ctxHost, ctxVars,
+		fmt.Sprintf("imported %s: %d new group(s), %d new host(s)", path, newGroups, newHosts))
 }

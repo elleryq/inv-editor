@@ -177,11 +177,22 @@ Then open `http://localhost:8080`.
 |---------|-------------|
 | Three-panel layout | Groups tree (left) · Hosts (right top) · Variables (right bottom) |
 | Group tree | Expand/collapse subgroups; click to select |
-| Host management | Add, rename, delete, move, or copy hosts |
+| Host management | Add (hostname + optional IP, stored as `ansible_host`), rename, delete |
+| Multi-select copy/move | Check multiple hosts, pick a target group, then **Move** or **Copy** — same semantics as the TUI's clipboard flow |
+| Group reparent / deep copy | "Move under" reparents a group; "Copy under" deep-copies it (subgroups, hosts, vars) as a new group |
+| Import | Merge another inventory file (read from the server's filesystem) into the one currently open, matched by group/host name |
 | Variable editor | Inline add/edit/delete for group or host vars |
 | Save | Writes back to the original file in its original format |
 | Download YAML | `GET /download` — always returns YAML regardless of source format |
 | Read-only mode | `--readonly` flag hides all edit controls; mutations return 403 |
+
+### Copy / Move and Import
+
+These mirror the TUI's behavior (see [Copy / Move workflow](#copy--move-workflow) and [Import](#import) above):
+
+- **Move** removes selected host(s) from the current group and adds them to the target group; **Copy** keeps them in the current group too.
+- **Copy under** (Groups panel) deep-copies a group's subgroups, member hosts, and vars under a new parent; leave the name field blank to auto-generate a non-colliding name.
+- **Import** matches groups/hosts by name: same-named items are merged (existing values win on conflict, new vars are added), not duplicated.
 
 > **Security note**: When listening on `0.0.0.0`, anyone on the network can access the editor. Use `--readonly` or `--host 127.0.0.1` if this is a concern.
 

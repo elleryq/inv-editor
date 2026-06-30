@@ -100,14 +100,15 @@ func (s *Server) handler() http.Handler {
 	mux.HandleFunc("POST /api/groups/delete", s.handleDeleteGroup)
 	mux.HandleFunc("POST /api/groups/expand", s.handleToggleExpand)
 	mux.HandleFunc("POST /api/groups/reparent", s.handleReparentGroup)
+	mux.HandleFunc("POST /api/groups/copy", s.handleCopyGroupDeep)
 	mux.HandleFunc("POST /api/groups/select", s.handleSelectGroup)
 
 	// Host mutations
 	mux.HandleFunc("POST /api/hosts/add", s.handleAddHost)
 	mux.HandleFunc("POST /api/hosts/rename", s.handleRenameHost)
 	mux.HandleFunc("POST /api/hosts/delete", s.handleDeleteHost)
-	mux.HandleFunc("POST /api/hosts/move", s.handleMoveHost)
-	mux.HandleFunc("POST /api/hosts/copy", s.handleCopyHost)
+	mux.HandleFunc("POST /api/hosts/move-bulk", s.handleBulkMoveHosts)
+	mux.HandleFunc("POST /api/hosts/copy-bulk", s.handleBulkCopyHosts)
 	mux.HandleFunc("POST /api/hosts/vars", s.handleSelectHostVars)
 
 	// Var mutations
@@ -117,6 +118,7 @@ func (s *Server) handler() http.Handler {
 	// File operations
 	mux.HandleFunc("POST /api/save", s.handleSave)
 	mux.HandleFunc("POST /api/export", s.handleExport)
+	mux.HandleFunc("POST /api/import", s.handleImport)
 
 	return mux
 }

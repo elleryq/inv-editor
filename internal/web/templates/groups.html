@@ -69,12 +69,40 @@
           <option value="">(top level)</option>
           {{range .AllGroups}}<option value="{{.}}">{{.}}</option>{{end}}
         </select>
-        <button type="submit" class="btn btn-sm">Move under</button>
+        <button type="submit" class="btn btn-sm" title="reparent — removes from current location">Move under</button>
+      </div>
+    </form>
+    <form method="POST" action="/api/groups/copy" style="margin-top:6px">
+      <input type="hidden" name="ctx_group" value="{{.SelectedGroup}}">
+      <input type="hidden" name="ctx_host"  value="{{.SelectedHost}}">
+      <input type="hidden" name="ctx_vars"  value="{{.VarCtx}}">
+      <input type="hidden" name="name"      value="{{.SelectedGroup}}">
+      <div class="form-row">
+        <select name="parent">
+          <option value="">(top level)</option>
+          {{range .AllGroups}}<option value="{{.}}">{{.}}</option>{{end}}
+        </select>
+        <input type="text" name="newname" placeholder="new name (optional)">
+        <button type="submit" class="btn btn-sm" title="deep copy — subgroups, hosts, and vars">Copy under</button>
       </div>
     </form>
     {{else}}
     <div style="color:var(--dim);font-size:12px;padding:4px">Select a non-root group first.</div>
     {{end}}
+  </details>
+
+  <!-- Import another inventory file, merged by name into this one -->
+  <details class="add-form">
+    <summary>Import inventory</summary>
+    <form method="POST" action="/api/import">
+      <input type="hidden" name="ctx_group" value="{{.SelectedGroup}}">
+      <input type="hidden" name="ctx_host"  value="{{.SelectedHost}}">
+      <input type="hidden" name="ctx_vars"  value="{{.VarCtx}}">
+      <div class="form-row">
+        <input type="text" name="path" placeholder="path on server, e.g. other.yaml" required>
+        <button type="submit" class="btn btn-sm">Import &amp; merge</button>
+      </div>
+    </form>
   </details>
 
   <!-- Hidden delete form -->
