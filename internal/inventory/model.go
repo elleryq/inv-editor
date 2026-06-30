@@ -1,6 +1,9 @@
 package inventory
 
-import "slices"
+import (
+	"fmt"
+	"slices"
+)
 
 // Host represents a single managed node.
 type Host struct {
@@ -365,6 +368,74 @@ func (inv *Inventory) CopyHostToGroup(hostName, targetGroup string) bool {
 	return inv.AddHost(hostName, targetGroup)
 }
 
+// UniqueGroupName returns base if it isn't already in use, otherwise base
+// suffixed with "-copy", "-copy2", "-copy3", ... until a free name is found.
+func (inv *Inventory) UniqueGroupName(base string) string {
+	if inv.byName[base] == nil {
+		return base
+	}
+	if inv.byName[base+"-copy"] == nil {
+		return base + "-copy"
+	}
+	for i := 2; ; i++ {
+		candidate := fmt.Sprintf("%s-copy%d", base, i)
+		if inv.byName[candidate] == nil {
+			return candidate
+		}
+	}
+}
+
+// CopyGroupDeep deep-copies srcName, including its descendant groups, hosts
+// membership and vars, as a new subtree attached under targetParent
+// ("" or "all" for top-level). The copied root is named newName; descendant
+// groups keep their original names unless that name is already taken, in
+// which case UniqueGroupName resolves the collision. Hosts are not
+// duplicated — the cloned groups reference the same host names. Returns the
+// new root group's name, or "" if srcName/targetParent is invalid or newName
+// is already in use.
+func (inv *Inventory) CopyGroupDeep(srcName, targetParent, newName string) string {
+	src := inv.byName[srcName]
+	if src == nil || srcName == "all" {
+		return ""
+	}
+	if newName == "" || inv.byName[newName] != nil {
+		return ""
+	}
+	if targetParent != "" && targetParent != "all" && inv.byName[targetParent] == nil {
+		return ""
+	}
+
+	var clone func(orig *Group, parent, name string) string
+	clone = func(orig *Group, parent, name string) string {
+		// snapshot before AddGroupUnder mutates orig.Children (relevant when
+		// parent == orig.Name, i.e. copying a group under itself).
+		children := append([]string(nil), orig.Children...)
+		hosts := append([]string(nil), orig.Hosts...)
+		vars := make(map[string]string, len(orig.Vars))
+		for k, v := range orig.Vars {
+			vars[k] = v
+		}
+
+		if !inv.AddGroupUnder(parent, name) {
+			return ""
+		}
+		ng := inv.byName[name]
+		ng.Vars = vars
+		ng.Hosts = hosts
+
+		for _, childName := range children {
+			child := inv.byName[childName]
+			if child == nil {
+				continue
+			}
+			clone(child, name, inv.UniqueGroupName(child.Name))
+		}
+		return name
+	}
+
+	return clone(src, targetParent, newName)
+}
+
 // GroupsForHost returns all group names that contain the given host (excluding "all").
 func (inv *Inventory) GroupsForHost(hostName string) []string {
 	var out []string
@@ -377,4 +448,58 @@ func (inv *Inventory) GroupsForHost(hostName string) []string {
 		}
 	}
 	return out
+}
+
+// MergeFrom merges all groups and hosts from other into inv, matching by
+// name. For a group/host that already exists in inv, missing vars are
+// filled in (inv's existing values always win on conflict) and host
+// membership / group-vars are unioned; the existing group's parent in inv
+// is left untouched even if other places it elsewhere. For a group/host
+// that doesn't exist yet, it's created using other's parent (resolved by
+// name, since other.groups is parent-before-child ordered). Returns the
+// number of newly created groups and hosts.
+func (inv *Inventory) MergeFrom(other *Inventory) (newGroups, newHosts int) {
+	for _, g := range other.groups {
+		if g.Name == "all" {
+			mergeVars(inv.byName["all"].Vars, g.Vars)
+			continue
+		}
+		existing := inv.byName[g.Name]
+		if existing == nil {
+			if !inv.AddGroupUnder(g.Parent, g.Name) {
+				continue // parent missing/invalid; skip this group
+			}
+			existing = inv.byName[g.Name]
+			newGroups++
+		}
+		mergeVars(existing.Vars, g.Vars)
+		for _, h := range g.Hosts {
+			if !slices.Contains(existing.Hosts, h) {
+				existing.Hosts = append(existing.Hosts, h)
+			}
+		}
+	}
+
+	for name, h := range other.hosts {
+		existing := inv.hosts[name]
+		if existing == nil {
+			vars := make(map[string]string, len(h.Vars))
+			mergeVars(vars, h.Vars)
+			inv.hosts[name] = &Host{Name: name, Vars: vars}
+			newHosts++
+			continue
+		}
+		mergeVars(existing.Vars, h.Vars)
+	}
+
+	return newGroups, newHosts
+}
+
+// mergeVars copies entries from src into dst for keys dst doesn't already have.
+func mergeVars(dst, src map[string]string) {
+	for k, v := range src {
+		if _, exists := dst[k]; !exists {
+			dst[k] = v
+		}
+	}
 }

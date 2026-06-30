@@ -48,6 +48,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.doSave()
 	case "x":
 		return m.startExport()
+	case "i":
+		return m.startImport()
 	case "tab":
 		m.focus = (m.focus + 1) % 3
 		return m, nil
@@ -63,6 +65,13 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "V":
 		m.focus = panelVars
 		return m, nil
+	case "esc":
+		if m.clipboard.kind != clipNone {
+			m.clipboard = clipboardState{}
+			m.selectedHosts = nil
+			m.statusMsg = "Clipboard cleared"
+			return m, nil
+		}
 	}
 
 	switch m.focus {
@@ -182,10 +191,18 @@ func (m Model) handleGroupsKey(key string) (tea.Model, tea.Cmd) {
 			m.rebuildVars()
 			m.focus = panelVars
 		}
-	case "M":
+	case "c":
 		if len(m.treeNodes) > 0 && m.currentGroupName() != "all" {
-			m.startMoveGroup()
+			m.clipboard = clipboardState{kind: clipGroup, mode: clipModeCopy, groupName: m.currentGroupName()}
+			m.statusMsg = fmt.Sprintf("Marked group %q to copy — select target group and press p", m.currentGroupName())
 		}
+	case "m":
+		if len(m.treeNodes) > 0 && m.currentGroupName() != "all" {
+			m.clipboard = clipboardState{kind: clipGroup, mode: clipModeMove, groupName: m.currentGroupName()}
+			m.statusMsg = fmt.Sprintf("Marked group %q to move — select target group and press p", m.currentGroupName())
+		}
+	case "p":
+		return m.pasteClipboard()
 	}
 	return m, nil
 }
@@ -212,7 +229,8 @@ func (m Model) handleHostsKey(key string) (tea.Model, tea.Cmd) {
 		m.hostHScroll = max(0, m.hostHScroll-hScrollStep)
 	case "n":
 		m.startInput(inputNewHost, "New Host", []inputField{
-			{label: "Host address", placeholder: "e.g. 192.168.1.10 or web01.example.com"},
+			{label: "Hostname", placeholder: "e.g. web01"},
+			{label: "IP (ansible_host)", placeholder: "optional, e.g. 192.168.1.10"},
 		})
 	case "e", "enter":
 		if len(m.hostNames) > 0 {
@@ -240,16 +258,49 @@ func (m Model) handleHostsKey(key string) (tea.Model, tea.Cmd) {
 			m.rebuildVars()
 			m.focus = panelVars
 		}
-	case "m":
+	case " ":
 		if len(m.hostNames) > 0 {
-			m.startMoveHost()
+			name := m.currentHostName()
+			if m.selectedHosts == nil {
+				m.selectedHosts = make(map[string]bool)
+			}
+			if m.selectedHosts[name] {
+				delete(m.selectedHosts, name)
+			} else {
+				m.selectedHosts[name] = true
+			}
 		}
 	case "c":
 		if len(m.hostNames) > 0 {
-			m.startCopyHost()
+			hosts := m.markedHosts()
+			m.clipboard = clipboardState{kind: clipHosts, mode: clipModeCopy, hostNames: hosts, sourceGroup: m.currentGroupName()}
+			m.selectedHosts = nil
+			m.statusMsg = fmt.Sprintf("Marked %d host(s) to copy — select target group and press p", len(hosts))
+		}
+	case "m":
+		if len(m.hostNames) > 0 {
+			hosts := m.markedHosts()
+			m.clipboard = clipboardState{kind: clipHosts, mode: clipModeMove, hostNames: hosts, sourceGroup: m.currentGroupName()}
+			m.selectedHosts = nil
+			m.statusMsg = fmt.Sprintf("Marked %d host(s) to move — select target group and press p", len(hosts))
 		}
 	}
 	return m, nil
+}
+
+// markedHosts returns the multi-selected hosts in display order, or just the
+// host under the cursor if nothing is multi-selected.
+func (m Model) markedHosts() []string {
+	if len(m.selectedHosts) == 0 {
+		return []string{m.currentHostName()}
+	}
+	var out []string
+	for _, n := range m.hostNames {
+		if m.selectedHosts[n] {
+			out = append(out, n)
+		}
+	}
+	return out
 }
 
 // --- vars ---
@@ -443,9 +494,13 @@ func (m Model) commitInput() (tea.Model, tea.Cmd) {
 		}
 	case inputNewHost:
 		hostName := strings.TrimSpace(m.inputFields[0].value)
+		ip := strings.TrimSpace(m.inputFields[1].value)
 		groupName := m.currentGroupName()
 		if hostName != "" && groupName != "" {
 			m.inv.AddHost(hostName, groupName)
+			if ip != "" {
+				m.inv.SetHostVar(hostName, "ansible_host", ip)
+			}
 			m.modified = true
 			m.rebuildHosts()
 			for i, n := range m.hostNames {
@@ -517,47 +572,38 @@ func (m Model) commitInput() (tea.Model, tea.Cmd) {
 				m.exportFmt = exportFmt
 			}
 		}
-	case inputMoveHost:
-		target := strings.TrimSpace(m.inputFields[0].value)
-		from := m.currentGroupName()
-		if target != "" && target != from {
-			if m.inv.MoveHost(m.moveHostName, from, target) {
+	case inputCopyGroupName:
+		newName := strings.TrimSpace(m.inputFields[0].value)
+		if newName != "" {
+			src := m.clipboard.groupName
+			target := m.pasteTargetGroup
+			if got := m.inv.CopyGroupDeep(src, target, newName); got != "" {
 				m.modified = true
-				m.rebuildHosts()
-			} else {
-				m.statusMsg = fmt.Sprintf("Group %q not found", target)
-			}
-		}
-	case inputMoveGroup:
-		rawTarget := strings.TrimSpace(m.inputFields[0].value)
-		name := m.currentGroupName()
-		newParent := rawTarget
-		if rawTarget == "(top level)" {
-			newParent = ""
-		}
-		if m.inv.ReparentGroup(name, newParent) {
-			m.modified = true
-			m.rebuildGroups()
-			// re-select the moved group
-			for i, n := range m.treeNodes {
-				if n.name == name {
-					m.groupIdx = i
-					break
+				m.statusMsg = fmt.Sprintf("Copied group %q to %q", src, got)
+				m.clipboard = clipboardState{}
+				m.rebuildGroups()
+				for i, n := range m.treeNodes {
+					if n.name == got {
+						m.groupIdx = i
+						break
+					}
 				}
-			}
-			m.ensureGroupVisible()
-		} else {
-			m.statusMsg = fmt.Sprintf("Cannot move %q to %q (cycle or not found)", name, rawTarget)
-		}
-	case inputCopyHost:
-		target := strings.TrimSpace(m.inputFields[0].value)
-		hostName := m.currentHostName()
-		if target != "" {
-			if m.inv.CopyHostToGroup(hostName, target) {
-				m.modified = true
-				m.statusMsg = fmt.Sprintf("Copied %q to group %q", hostName, target)
+				m.ensureGroupVisible()
 			} else {
-				m.statusMsg = fmt.Sprintf("Host already in %q or group not found", target)
+				m.statusMsg = fmt.Sprintf("Copy failed: name %q already in use", newName)
+			}
+		}
+	case inputImportPath:
+		path := strings.TrimSpace(m.inputFields[0].value)
+		if path != "" {
+			other, _, err := inventory.Load(path)
+			if err != nil {
+				m.statusMsg = fmt.Sprintf("Import failed: %v", err)
+			} else {
+				newGroups, newHosts := m.inv.MergeFrom(other)
+				m.modified = true
+				m.statusMsg = fmt.Sprintf("Imported %s: %d new group(s), %d new host(s)", path, newGroups, newHosts)
+				m.rebuildGroups()
 			}
 		}
 	}
@@ -647,65 +693,79 @@ func suggestExportPath(path string, fmt inventory.Format) string {
 	}
 }
 
-// --- move host ---
+// --- import ---
 
-func (m *Model) startMoveHost() {
-	m.moveHostName = m.currentHostName()
-	m.moveGroupIdx = 0
-	m.moveGroupNames = nil
-	current := m.currentGroupName()
-	for _, g := range m.inv.Groups() {
-		if g.Name != current && g.Name != "all" {
-			m.moveGroupNames = append(m.moveGroupNames, g.Name)
-		}
-	}
-	if len(m.moveGroupNames) == 0 {
-		m.statusMsg = "No other groups to move to"
-		return
-	}
-	m.startInput(inputMoveHost,
-		fmt.Sprintf("Move %q to group:", m.moveHostName),
-		[]inputField{{label: "Target group", value: m.moveGroupNames[0]}},
-	)
+func (m Model) startImport() (tea.Model, tea.Cmd) {
+	m.startInput(inputImportPath, "Import Inventory", []inputField{
+		{label: "Path", placeholder: "e.g. other-inventory.yaml"},
+	})
+	return m, nil
 }
 
-// startMoveGroup opens dialog to reparent the current group.
-func (m *Model) startMoveGroup() {
-	name := m.currentGroupName()
-	g := m.inv.Group(name)
-	if g == nil {
-		return
-	}
-	currentParent := g.Parent
-	if currentParent == "" {
-		currentParent = "(top level)"
-	}
-	// build options: top-level + all groups except self and own descendants
-	opts := []string{"(top level)"}
-	for _, grp := range m.inv.Groups() {
-		if grp.Name == "all" || grp.Name == name {
-			continue
-		}
-		if m.inv.IsDescendant(name, grp.Name) {
-			continue
-		}
-		opts = append(opts, grp.Name)
-	}
-	m.startInput(inputMoveGroup,
-		fmt.Sprintf("Move group %q under:", name),
-		[]inputField{{label: "New parent", value: currentParent}},
-	)
-}
+// --- clipboard paste ---
 
-// startCopyHost opens dialog to copy the current host to another group.
-func (m *Model) startCopyHost() {
-	name := m.currentHostName()
-	current := m.currentGroupName()
-	m.startInput(inputCopyHost,
-		fmt.Sprintf("Copy %q to group:", name),
-		[]inputField{{label: "Target group", value: ""}},
-	)
-	_ = current
+// pasteClipboard applies the pending clipboard (marked hosts or a marked
+// group) to the currently selected group in the Groups panel.
+func (m Model) pasteClipboard() (tea.Model, tea.Cmd) {
+	if m.clipboard.kind == clipNone {
+		return m, nil
+	}
+	target := m.currentGroupName()
+	if target == "" {
+		return m, nil
+	}
+
+	switch m.clipboard.kind {
+	case clipHosts:
+		count := 0
+		switch m.clipboard.mode {
+		case clipModeCopy:
+			for _, h := range m.clipboard.hostNames {
+				if m.inv.CopyHostToGroup(h, target) {
+					count++
+				}
+			}
+			m.statusMsg = fmt.Sprintf("Copied %d host(s) to %q", count, target)
+		case clipModeMove:
+			for _, h := range m.clipboard.hostNames {
+				if m.inv.MoveHost(h, m.clipboard.sourceGroup, target) {
+					count++
+				}
+			}
+			m.statusMsg = fmt.Sprintf("Moved %d host(s) to %q", count, target)
+		}
+		m.modified = true
+		m.clipboard = clipboardState{}
+		m.rebuildHosts()
+
+	case clipGroup:
+		name := m.clipboard.groupName
+		switch m.clipboard.mode {
+		case clipModeMove:
+			if m.inv.ReparentGroup(name, target) {
+				m.modified = true
+				m.statusMsg = fmt.Sprintf("Moved group %q under %q", name, target)
+				m.clipboard = clipboardState{}
+				m.rebuildGroups()
+				for i, n := range m.treeNodes {
+					if n.name == name {
+						m.groupIdx = i
+						break
+					}
+				}
+				m.ensureGroupVisible()
+			} else {
+				m.statusMsg = fmt.Sprintf("Cannot move %q under %q (cycle?)", name, target)
+			}
+		case clipModeCopy:
+			m.pasteTargetGroup = target
+			m.startInput(inputCopyGroupName,
+				fmt.Sprintf("Copy group %q to %q as:", name, target),
+				[]inputField{{label: "New group name", value: m.inv.UniqueGroupName(name)}},
+			)
+		}
+	}
+	return m, nil
 }
 
 // Run starts the TUI.

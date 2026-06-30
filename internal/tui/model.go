@@ -108,13 +108,41 @@ type Model struct {
 	exportFmt  inventory.Format
 	exportPath string
 
-	// move host dialog
-	moveHostName   string
-	moveGroupNames []string
-	moveGroupIdx   int
+	// host multi-select (hosts panel)
+	selectedHosts map[string]bool
+
+	// clipboard for copy/move of hosts or a group
+	clipboard clipboardState
+	// target group captured when paste of a group-copy opens the rename dialog
+	pasteTargetGroup string
 
 	// status message
 	statusMsg string
+}
+
+type clipKind int
+
+const (
+	clipNone clipKind = iota
+	clipHosts
+	clipGroup
+)
+
+type clipMode int
+
+const (
+	clipModeCopy clipMode = iota
+	clipModeMove
+)
+
+type clipboardState struct {
+	kind clipKind
+	mode clipMode
+
+	hostNames   []string // clipHosts
+	sourceGroup string   // clipHosts: group hosts were marked from (for move)
+
+	groupName string // clipGroup
 }
 
 type inputDialogMode int
@@ -128,9 +156,8 @@ const (
 	inputNewVar
 	inputEditVar
 	inputExportPath
-	inputMoveHost
-	inputMoveGroup
-	inputCopyHost
+	inputCopyGroupName
+	inputImportPath
 )
 
 type inputField struct {
@@ -200,6 +227,7 @@ func (m *Model) rebuildGroups() {
 }
 
 func (m *Model) rebuildHosts() {
+	m.selectedHosts = nil
 	if len(m.treeNodes) == 0 {
 		m.hostNames = nil
 		m.hostIdx = 0
@@ -498,17 +526,22 @@ func (m Model) viewHostsPanel(w, h int) string {
 
 	lines := make([]string, 0, visible+1)
 	for i := scroll; i < end; i++ {
-		// 2 cols reserved for "> " / "  " prefix
-		name := panelLineView(m.hostNames[i], m.hostHScroll, w-2)
+		box := "[ ]"
+		if m.selectedHosts[m.hostNames[i]] {
+			box = "[x]"
+		}
+		// 6 cols reserved for "> " cursor + "[ ] " checkbox prefix
+		name := panelLineView(m.hostNames[i], m.hostHScroll, w-6)
+		content := box + " " + name
 		var line string
 		if i == m.hostIdx {
 			if active {
-				line = styleSelected.Render("> " + name)
+				line = styleSelected.Render("> " + content)
 			} else {
-				line = "  " + styleDim.Render(name)
+				line = "  " + styleDim.Render(content)
 			}
 		} else {
-			line = "  " + name
+			line = "  " + content
 		}
 		lines = append(lines, line)
 	}
@@ -650,20 +683,31 @@ GROUPS PANEL
   ← / h                collapse / jump to parent
   n                    new group (choose parent in dialog)
   e / Enter            rename group
-  M                    move group (reparent)
+  c                    mark group to copy (deep copy)
+  m                    mark group to move (reparent)
+  p                    paste marked group/hosts into selected group
   d / Delete           delete group (children re-parented)
   v                    open group variables
 
 HOSTS PANEL
-  n                    new host
+  n                    new host (hostname + ip)
   e / Enter            rename host
-  m                    move host to another group (removes here)
-  c                    copy host to another group (keeps here)
+  space                toggle multi-select
+  c                    mark selected host(s) to copy
+  m                    mark selected host(s) to move
   d / Delete           remove host from this group
   v                    open host variables
 
+  After c/m, switch to the Groups panel, select the target
+  group, then press p to paste. Esc clears a pending clipboard.
+
 FILE
-  s  save   x  export   q  quit
+  s  save   x  export   i  import   q  quit
+
+IMPORT
+  i                    merge another inventory file into this one
+                       (matching group/host names are merged, not
+                       duplicated; existing values always win)
 
 Press any key to close`
 	return dialogBox(help, 56)

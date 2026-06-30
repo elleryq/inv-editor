@@ -9,6 +9,8 @@ Built with Go + [Bubble Tea](https://github.com/charmbracelet/bubbletea).
 - Create inventory from scratch or open an existing file
 - Support INI and YAML Ansible inventory formats
 - Manage groups, hosts, and variables with a keyboard-driven TUI
+- Multi-select hosts and copy/move them (or whole groups) between groups via a clipboard (mark with `c`/`m`, paste with `p`)
+- Import another inventory file and merge it into the one you're editing
 - Export to any supported format
 - Single static binary, no dependencies
 
@@ -49,17 +51,41 @@ inv-editor serve vc8.yaml --host 0.0.0.0 --readonly  # read-only mode
 | `Tab` / `Shift+Tab` | Cycle between panels (Groups → Hosts → Variables) |
 | `G` / `H` / `V` | Jump directly to Groups / Hosts / Variables panel |
 | `↑` `↓` or `j` `k` | Navigate items in current panel |
-| `n` | New item (group, host, or variable) |
+| `n` | New item — group, host (hostname + optional IP, stored as `ansible_host`), or variable |
 | `e` / `Enter` | Edit selected item |
 | `d` / `Delete` | Delete selected item |
-| `m` | Move host to another group — removes from current (Hosts panel) |
-| `c` | Copy host to another group — keeps in current (Hosts panel) |
-| `M` | Move (reparent) group under a different parent (Groups panel) |
+| `space` | Toggle multi-select for the host under the cursor (Hosts panel) |
+| `c` | Mark the selected host(s) — or current group — to **copy** |
+| `m` | Mark the selected host(s) — or current group — to **move** |
+| `p` | Paste the marked host(s)/group into the group currently selected in the Groups panel |
+| `Esc` | Clear a pending copy/move clipboard |
 | `v` | Open variables for selected group or host |
 | `s` | Save to original file |
 | `x` | Export to a different format/path |
+| `i` | Import another inventory file and merge it into the current one |
 | `q` | Quit (Save & Quit / Discard / Cancel if unsaved changes) |
 | `?` | Toggle help overlay |
+
+### Copy / Move workflow
+
+Both the Hosts panel and the Groups panel use the same clipboard flow:
+
+1. Press `c` (copy) or `m` (move) on a host (or multi-selected hosts) or on a group.
+2. Switch to the Groups panel (`Tab`/`G`) and select the destination group.
+3. Press `p` to paste.
+
+- Copying a host adds it to the target group without removing it from the source.
+- Moving a host removes it from the source group and adds it to the target.
+- Copying a group deep-copies it (subgroups, member hosts, and vars) under the target as a new group — you'll be prompted for a new name to avoid collisions.
+- Moving a group reparents it under the target group.
+
+### Import
+
+`i` opens a file path prompt. The selected inventory file is parsed and merged into the one currently open:
+
+- Groups and hosts are matched **by name** — same-named items are merged, not duplicated.
+- On a variable conflict, the currently open inventory's value always wins; new variables from the imported file are added.
+- Host group-membership is unioned (a host keeps all the groups it belonged to in either file).
 
 ## Screen Layout
 
@@ -69,10 +95,10 @@ inv-editor serve vc8.yaml --host 0.0.0.0 --readonly  # read-only mode
 ├───────────────────────┬─────────────────────────────────────┤
 │  GROUPS          [G]  │  HOSTS (webservers)            [H]  │
 │                       │                                     │
-│   all                 │   web01.example.com                 │
-│ > webservers          │ > web02.example.com                 │
-│   dbservers           │   web03.example.com                 │
-│   [+ New Group]       │   [+ New Host]                      │
+│   all                 │   [ ] web01.example.com              │
+│ > webservers          │ > [x] web02.example.com              │
+│   dbservers           │   [ ] web03.example.com              │
+│   [+ New Group]       │   [+ New Host]                       │
 ├───────────────────────┴─────────────────────────────────────┤
 │  VARIABLES  (web02.example.com)                        [V]  │
 │                                                             │
