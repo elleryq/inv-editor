@@ -461,7 +461,13 @@ func (inv *Inventory) GroupsForHost(hostName string) []string {
 func (inv *Inventory) MergeFrom(other *Inventory) (newGroups, newHosts int) {
 	for _, g := range other.groups {
 		if g.Name == "all" {
-			mergeVars(inv.byName["all"].Vars, g.Vars)
+			allGrp := inv.byName["all"]
+			mergeVars(allGrp.Vars, g.Vars)
+			for _, h := range g.Hosts {
+				if !slices.Contains(allGrp.Hosts, h) {
+					allGrp.Hosts = append(allGrp.Hosts, h)
+				}
+			}
 			continue
 		}
 		existing := inv.byName[g.Name]

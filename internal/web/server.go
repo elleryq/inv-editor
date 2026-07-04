@@ -119,6 +119,7 @@ func (s *Server) handler() http.Handler {
 	mux.HandleFunc("POST /api/save", s.handleSave)
 	mux.HandleFunc("POST /api/export", s.handleExport)
 	mux.HandleFunc("POST /api/import", s.handleImport)
+	mux.HandleFunc("POST /api/import-upload", s.handleImportUpload)
 
 	return mux
 }

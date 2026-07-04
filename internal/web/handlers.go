@@ -2,6 +2,7 @@ package web
 
 import (
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -680,4 +681,50 @@ func (s *Server) handleImport(w http.ResponseWriter, r *http.Request) {
 	s.mu.Unlock()
 	redirectBack(w, r, ctxGroup, ctxHost, ctxVars,
 		fmt.Sprintf("imported %s: %d new group(s), %d new host(s)", path, newGroups, newHosts))
+}
+
+// handleImportUpload accepts a browser file upload (multipart/form-data),
+// parses the inventory content, and merges it into the currently open one.
+func (s *Server) handleImportUpload(w http.ResponseWriter, r *http.Request) {
+	if s.guardWrite(w) {
+		return
+	}
+	ctxGroup, ctxHost, ctxVars := s.currentCtx(r)
+
+	if err := r.ParseMultipartForm(8 << 20); err != nil { // 8 MiB limit
+		redirectBack(w, r, ctxGroup, ctxHost, ctxVars, "upload error: "+err.Error())
+		return
+	}
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		redirectBack(w, r, ctxGroup, ctxHost, ctxVars, "no file received: "+err.Error())
+		return
+	}
+	defer file.Close()
+
+	data, err := io.ReadAll(file)
+	if err != nil {
+		redirectBack(w, r, ctxGroup, ctxHost, ctxVars, "read error: "+err.Error())
+		return
+	}
+
+	format := inventory.DetectFormat(header.Filename)
+	var other *inventory.Inventory
+	switch format {
+	case inventory.FormatYAML:
+		other, err = inventory.ParseYAML(data)
+	default:
+		other, err = inventory.ParseINI(data)
+	}
+	if err != nil {
+		redirectBack(w, r, ctxGroup, ctxHost, ctxVars, "parse error: "+err.Error())
+		return
+	}
+
+	s.mu.Lock()
+	newGroups, newHosts := s.inv.MergeFrom(other)
+	s.modified = true
+	s.mu.Unlock()
+	redirectBack(w, r, ctxGroup, ctxHost, ctxVars,
+		fmt.Sprintf("imported %s: %d new group(s), %d new host(s)", header.Filename, newGroups, newHosts))
 }

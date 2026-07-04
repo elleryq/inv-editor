@@ -94,12 +94,22 @@
   <!-- Import another inventory file, merged by name into this one -->
   <details class="add-form">
     <summary>Import inventory</summary>
+    <form method="POST" action="/api/import-upload" enctype="multipart/form-data">
+      <input type="hidden" name="ctx_group" value="{{.SelectedGroup}}">
+      <input type="hidden" name="ctx_host"  value="{{.SelectedHost}}">
+      <input type="hidden" name="ctx_vars"  value="{{.VarCtx}}">
+      <div class="form-row">
+        <input type="file" name="file" accept=".ini,.cfg,.yaml,.yml" required>
+        <button type="submit" class="btn btn-primary btn-sm">Upload &amp; merge</button>
+      </div>
+    </form>
+    <div class="import-sep">or import by server path</div>
     <form method="POST" action="/api/import">
       <input type="hidden" name="ctx_group" value="{{.SelectedGroup}}">
       <input type="hidden" name="ctx_host"  value="{{.SelectedHost}}">
       <input type="hidden" name="ctx_vars"  value="{{.VarCtx}}">
       <div class="form-row">
-        <input type="text" name="path" placeholder="path on server, e.g. other.yaml" required>
+        <input type="text" name="path" placeholder="e.g. /srv/other.yaml">
         <button type="submit" class="btn btn-sm">Import &amp; merge</button>
       </div>
     </form>

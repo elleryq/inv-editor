@@ -316,6 +316,69 @@ func TestMergeFrom(t *testing.T) {
 	}
 }
 
+// TestMergeFromYAMLImport reproduces the bug where a new host in a
+// standard YAML "all.hosts" section was invisible after import because
+// MergeFrom skipped merging the "all" group's Hosts list.
+func TestMergeFromYAMLImport(t *testing.T) {
+	inv := New()
+	inv.AddGroup("webservers")
+	inv.AddHost("old_host", "webservers")
+	inv.AddHost("old_host", "all")
+
+	importYAML := []byte(`
+all:
+  hosts:
+    old_host:
+      ansible_user: ubuntu
+    new_host:
+      ansible_host: 10.0.0.5
+  children:
+    webservers:
+      hosts:
+        old_host: null
+        new_host: null
+`)
+	other, err := ParseYAML(importYAML)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	inv.MergeFrom(other)
+
+	if h := inv.Host("old_host"); h == nil || h.Vars["ansible_user"] != "ubuntu" {
+		t.Errorf("old_host: expected ansible_user=ubuntu, got %v", h)
+	}
+	if inv.Host("new_host") == nil {
+		t.Fatal("new_host host record missing after merge")
+	}
+	if h := inv.Host("new_host"); h.Vars["ansible_host"] != "10.0.0.5" {
+		t.Errorf("new_host: expected ansible_host=10.0.0.5, got %v", h.Vars)
+	}
+
+	webHosts := inv.HostsInGroup("webservers")
+	found := false
+	for _, h := range webHosts {
+		if h.Name == "new_host" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("new_host should be visible in webservers group")
+	}
+
+	// This is the bug: new_host not in inv's "all" Hosts list
+	allHosts := inv.HostsInGroup("all")
+	found = false
+	for _, h := range allHosts {
+		if h.Name == "new_host" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("new_host should be visible in all group (was invisible before fix)")
+	}
+}
+
 func TestSubgroupINIRoundTrip(t *testing.T) {
 	data := []byte(`
 [production]

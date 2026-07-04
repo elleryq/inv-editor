@@ -180,7 +180,7 @@ Then open `http://localhost:8080`.
 | Host management | Add (hostname + optional IP, stored as `ansible_host`), rename, delete |
 | Multi-select copy/move | Check multiple hosts, pick a target group, then **Move** or **Copy** — same semantics as the TUI's clipboard flow |
 | Group reparent / deep copy | "Move under" reparents a group; "Copy under" deep-copies it (subgroups, hosts, vars) as a new group |
-| Import | Merge another inventory file (read from the server's filesystem) into the one currently open, matched by group/host name |
+| Import | **Upload** an inventory file from the browser (INI or YAML auto-detected from extension), or import by server-side path — both merge by group/host name |
 | Variable editor | Inline add/edit/delete for group or host vars |
 | Save | Writes back to the original file in its original format |
 | Download YAML | `GET /download` — always returns YAML regardless of source format |
