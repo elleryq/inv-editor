@@ -12,7 +12,9 @@
   <span class="title">inv-editor: {{.FilePath}}</span>
   {{if .ReadOnly}}<span class="badge badge-ro">read-only</span>{{end}}
   {{if .Modified}}<span class="badge badge-mod">modified</span>{{end}}
-  <a href="/download" class="btn" title="Download as YAML">⬇ YAML</a>
+  <a href="/download{{if .SearchQuery}}?q={{urlEncode .SearchQuery}}{{end}}"
+     class="btn" title="{{if .SearchQuery}}Download filtered results as YAML{{else}}Download as YAML{{end}}">
+    ⬇ YAML{{if .SearchQuery}} (filtered){{end}}</a>
   {{if not .ReadOnly}}
   <form method="POST" action="/api/save" style="display:contents">
     <input type="hidden" name="ctx_group" value="{{.SelectedGroup}}">

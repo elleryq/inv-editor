@@ -328,6 +328,22 @@ select option { background: var(--surface); }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--dim); }
 
+/* ── Search input (groups panel header) ─────────────── */
+.search-input {
+  flex: 1;
+  min-width: 60px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12px;
+  padding: 2px 6px;
+  outline: none;
+}
+.search-input:focus { border-color: var(--accent); }
+.search-input.bad   { border-color: var(--red); }
+
 /* ── File input ──────────────────────────────────────── */
 input[type=file] {
   background: var(--surface);

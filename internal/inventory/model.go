@@ -2,7 +2,9 @@ package inventory
 
 import (
 	"fmt"
+	"regexp"
 	"slices"
+	"strings"
 )
 
 // Host represents a single managed node.
@@ -445,6 +447,168 @@ func (inv *Inventory) GroupsForHost(hostName string) []string {
 		}
 		if slices.Contains(g.Hosts, hostName) {
 			out = append(out, g.Name)
+		}
+	}
+	return out
+}
+
+// SearchFilter encapsulates a compiled search query. When VarKey is empty the
+// filter matches group and host names; when VarKey is set it matches only
+// hosts whose variable with that key has a value satisfying Re.
+type SearchFilter struct {
+	Re     *regexp.Regexp
+	VarKey string // non-empty → var-value search; empty → name search
+}
+
+// ParseSearchFilter compiles a raw query string into a SearchFilter.
+// A query of the form "key=pattern" matches hosts whose var key has a value
+// matching pattern (pattern is compiled as a regexp). A plain query matches
+// group/host names. Returns nil for an empty query.
+func ParseSearchFilter(query string) (*SearchFilter, error) {
+	if query == "" {
+		return nil, nil
+	}
+	if idx := strings.IndexByte(query, '='); idx > 0 {
+		key := query[:idx]
+		valPat := query[idx+1:]
+		re, err := regexp.Compile(valPat)
+		if err != nil {
+			return nil, err
+		}
+		return &SearchFilter{Re: re, VarKey: key}, nil
+	}
+	re, err := regexp.Compile(query)
+	if err != nil {
+		return nil, err
+	}
+	return &SearchFilter{Re: re}, nil
+}
+
+// MatchHost reports whether h satisfies the filter.
+func (f *SearchFilter) MatchHost(h *Host) bool {
+	if h == nil {
+		return false
+	}
+	if f.VarKey != "" {
+		val, exists := h.Vars[f.VarKey]
+		if !exists {
+			return false
+		}
+		return f.Re.MatchString(val)
+	}
+	return f.Re.MatchString(h.Name)
+}
+
+// MatchGroupName reports whether a group name satisfies the filter.
+// Var-key searches never match by group name.
+func (f *SearchFilter) MatchGroupName(name string) bool {
+	return f.VarKey == "" && f.Re.MatchString(name)
+}
+
+// FilteredInventory returns a new Inventory containing only the groups and
+// hosts whose names match re, preserving the full ancestor hierarchy of any
+// matched group for structural correctness. Groups matched by name include
+// all their direct hosts; groups matched only because they contain a matching
+// host include only those hosts. Ancestor groups that are neither matched by
+// name nor have matching hosts are included as structural-only nodes (no
+// hosts, vars preserved). Returns inv unchanged when re is nil.
+func (inv *Inventory) FilteredInventory(f *SearchFilter) *Inventory {
+	if f == nil {
+		return inv
+	}
+
+	type inclusion int
+	const (
+		excl   inclusion = iota // not included
+		anc                     // ancestor-only: structural node, no own hosts
+		byName                  // group name matched: include all direct hosts
+		byHost                  // has matching hosts: include only matching hosts
+	)
+	include := make(map[string]inclusion)
+
+	for _, g := range inv.groups {
+		if g.Name == "all" {
+			continue
+		}
+		var inc inclusion
+		if f.MatchGroupName(g.Name) {
+			inc = byName
+		} else {
+			for _, h := range g.Hosts {
+				if f.MatchHost(inv.Host(h)) {
+					inc = byHost
+					break
+				}
+			}
+		}
+		if inc == excl {
+			continue
+		}
+		include[g.Name] = inc
+		// mark ancestor chain as structural nodes
+		for p := g.Parent; p != ""; {
+			if _, exists := include[p]; !exists {
+				include[p] = anc
+			}
+			pg := inv.byName[p]
+			if pg == nil {
+				break
+			}
+			p = pg.Parent
+		}
+	}
+
+	out := New()
+	// copy "all" vars and matching direct hosts
+	for k, v := range inv.byName["all"].Vars {
+		out.byName["all"].Vars[k] = v
+	}
+	for _, h := range inv.byName["all"].Hosts {
+		if f.MatchHost(inv.Host(h)) {
+			out.AddHost(h, "all")
+			if orig := inv.Host(h); orig != nil {
+				for k, v := range orig.Vars {
+					out.SetHostVar(h, k, v)
+				}
+			}
+		}
+	}
+
+	// process groups in insertion order (parent-before-child guaranteed)
+	for _, g := range inv.groups {
+		if g.Name == "all" {
+			continue
+		}
+		inc, ok := include[g.Name]
+		if !ok {
+			continue
+		}
+		out.AddGroupUnder(g.Parent, g.Name)
+		og := out.byName[g.Name]
+		for k, v := range g.Vars {
+			og.Vars[k] = v
+		}
+		if inc == anc {
+			continue // structural only
+		}
+		var hostsToAdd []string
+		if inc == byName {
+			hostsToAdd = g.Hosts
+		} else {
+			for _, h := range g.Hosts {
+				if f.MatchHost(inv.Host(h)) {
+					hostsToAdd = append(hostsToAdd, h)
+				}
+			}
+		}
+		for _, h := range hostsToAdd {
+			out.AddHost(h, g.Name)
+			out.AddHost(h, "all") // YAML single-source-of-truth
+			if orig := inv.Host(h); orig != nil {
+				for k, v := range orig.Vars {
+					out.SetHostVar(h, k, v)
+				}
+			}
 		}
 	}
 	return out

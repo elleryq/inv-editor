@@ -319,6 +319,106 @@ func TestMergeFrom(t *testing.T) {
 // TestMergeFromYAMLImport reproduces the bug where a new host in a
 // standard YAML "all.hosts" section was invisible after import because
 // MergeFrom skipped merging the "all" group's Hosts list.
+func TestFilteredInventory(t *testing.T) {
+	inv := New()
+	inv.AddGroup("webservers")
+	inv.AddGroupUnder("webservers", "webservers-east")
+	inv.AddGroup("dbservers")
+	inv.AddHost("web01", "webservers")
+	inv.AddHost("web02", "webservers-east")
+	inv.AddHost("db01", "dbservers")
+	inv.SetHostVar("web01", "ansible_host", "10.0.0.1")
+	inv.SetHostVar("web02", "ansible_host", "10.0.0.2")
+	inv.SetHostVar("db01", "ansible_host", "10.1.0.1")
+	inv.SetGroupVar("webservers", "env", "prod")
+
+	sf := func(q string) *SearchFilter { f, _ := ParseSearchFilter(q); return f }
+
+	t.Run("host name match", func(t *testing.T) {
+		f := inv.FilteredInventory(sf("web01"))
+		if f.Group("webservers") == nil {
+			t.Error("webservers missing")
+		}
+		if f.Host("web01") == nil {
+			t.Error("web01 missing")
+		}
+		if f.Host("db01") != nil {
+			t.Error("db01 should not be in filtered inventory")
+		}
+		if f.Host("web01").Vars["ansible_host"] != "10.0.0.1" {
+			t.Error("host var not preserved")
+		}
+		if f.Group("webservers").Vars["env"] != "prod" {
+			t.Error("group var not preserved")
+		}
+	})
+
+	t.Run("group name match includes all its hosts", func(t *testing.T) {
+		f := inv.FilteredInventory(sf("^webservers$"))
+		hosts := f.HostsInGroup("webservers")
+		if len(hosts) != 1 || hosts[0].Name != "web01" {
+			t.Errorf("unexpected hosts in webservers: %v", hosts)
+		}
+		if f.Host("db01") != nil {
+			t.Error("db01 should not appear")
+		}
+	})
+
+	t.Run("ancestor chain preserved", func(t *testing.T) {
+		f := inv.FilteredInventory(sf("east"))
+		if f.Group("webservers") == nil {
+			t.Error("webservers ancestor should be included")
+		}
+		if f.Group("webservers-east") == nil {
+			t.Error("webservers-east should be included")
+		}
+		if len(f.HostsInGroup("webservers")) != 0 {
+			t.Error("ancestor group should have no direct hosts when only child matched")
+		}
+	})
+
+	t.Run("nil filter returns original", func(t *testing.T) {
+		if inv.FilteredInventory(nil) != inv {
+			t.Error("nil filter should return the original inventory unchanged")
+		}
+	})
+
+	t.Run("var key=value search", func(t *testing.T) {
+		// ansible_host=10\.0\.0\. matches web01 and web02 only
+		f := inv.FilteredInventory(sf(`ansible_host=10\.0\.0\.`))
+		if f.Host("web01") == nil {
+			t.Error("web01 should match ansible_host=10.0.0.x")
+		}
+		if f.Host("web02") == nil {
+			t.Error("web02 should match ansible_host=10.0.0.x")
+		}
+		if f.Host("db01") != nil {
+			t.Error("db01 ansible_host 10.1.0.1 should not match")
+		}
+		if f.Group("webservers") == nil || f.Group("webservers-east") == nil {
+			t.Error("groups containing matched hosts should be present")
+		}
+		if f.Group("dbservers") != nil {
+			t.Error("dbservers should not appear — its only host did not match")
+		}
+	})
+
+	t.Run("var key with no matching hosts", func(t *testing.T) {
+		f := inv.FilteredInventory(sf("ansible_host=99\\."))
+		if f.Host("web01") != nil || f.Host("db01") != nil {
+			t.Error("no hosts should match ansible_host=99.x")
+		}
+	})
+
+	t.Run("var key absent on host", func(t *testing.T) {
+		// searching for a var key that no host has should return empty
+		f := inv.FilteredInventory(sf("nonexistent_var=.*"))
+		if len(f.HostsInGroup("all")) != 0 {
+			t.Error("no hosts should match a nonexistent var key")
+		}
+	})
+}
+
 func TestMergeFromYAMLImport(t *testing.T) {
 	inv := New()
 	inv.AddGroup("webservers")

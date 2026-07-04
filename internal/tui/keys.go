@@ -31,6 +31,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.confirmMsg != "" {
 		return m.handleConfirmKey(msg)
 	}
+	if m.inSearch {
+		return m.handleSearchKey(msg)
+	}
 
 	key := msg.String()
 
@@ -50,6 +53,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.startExport()
 	case "i":
 		return m.startImport()
+	case "/":
+		m.inSearch = true
+		return m, nil
 	case "tab":
 		m.focus = (m.focus + 1) % 3
 		return m, nil
@@ -66,6 +72,13 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.focus = panelVars
 		return m, nil
 	case "esc":
+		if m.searchQuery != "" || m.searchBad {
+			m.searchQuery = ""
+			m.searchFilter = nil
+			m.searchBad = false
+			m.rebuildGroups()
+			return m, nil
+		}
 		if m.clipboard.kind != clipNone {
 			m.clipboard = clipboardState{}
 			m.selectedHosts = nil
@@ -564,10 +577,16 @@ func (m Model) commitInput() (tea.Model, tea.Cmd) {
 			exportFmt = inventory.FormatINI
 		}
 		if path != "" {
-			if err := inventory.Save(m.inv, path, exportFmt); err != nil {
+			exportInv := m.inv
+			filtered := ""
+			if m.searchFilter != nil {
+				exportInv = m.inv.FilteredInventory(m.searchFilter)
+				filtered = " (filtered)"
+			}
+			if err := inventory.Save(exportInv, path, exportFmt); err != nil {
 				m.statusMsg = fmt.Sprintf("Export failed: %v", err)
 			} else {
-				m.statusMsg = fmt.Sprintf("Exported %s to %s", exportFmt.String(), path)
+				m.statusMsg = fmt.Sprintf("Exported %s to %s%s", exportFmt.String(), path, filtered)
 				m.exportPath = path
 				m.exportFmt = exportFmt
 			}
@@ -766,6 +785,55 @@ func (m Model) pasteClipboard() (tea.Model, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+// --- search ---
+
+func (m Model) handleSearchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		m.searchQuery = ""
+		m.searchFilter = nil
+		m.searchBad = false
+		m.inSearch = false
+		m.rebuildGroups()
+	case "enter":
+		m.inSearch = false
+		m.focus = panelGroups
+	case "backspace":
+		if len(m.searchQuery) > 0 {
+			runes := []rune(m.searchQuery)
+			m.searchQuery = string(runes[:len(runes)-1])
+			m.updateSearch()
+		}
+	default:
+		if len(msg.Runes) == 1 {
+			m.searchQuery += string(msg.Runes)
+			m.updateSearch()
+		}
+	}
+	return m, nil
+}
+
+func (m *Model) updateSearch() {
+	if m.searchQuery == "" {
+		m.searchFilter = nil
+		m.searchBad = false
+	} else {
+		f, err := inventory.ParseSearchFilter(m.searchQuery)
+		if err != nil {
+			m.searchFilter = nil
+			m.searchBad = true
+		} else {
+			m.searchFilter = f
+			m.searchBad = false
+		}
+	}
+	m.groupIdx = 0
+	m.hostIdx = 0
+	m.groupScroll = 0
+	m.hostScroll = 0
+	m.rebuildGroups()
 }
 
 // Run starts the TUI.

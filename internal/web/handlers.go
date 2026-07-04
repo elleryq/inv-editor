@@ -42,6 +42,8 @@ type pageData struct {
 	AllGroupNames []string // for dropdowns (excluding "all")
 	AllGroups     []string // for dropdowns (including "all")
 	CurrentGroup  string   // the group whose hosts are shown
+	SearchQuery   string   // raw regex string from ?q=
+	SearchBad     bool     // true when the regex is invalid
 }
 
 // ----- tree building -----
@@ -78,6 +80,16 @@ func (s *Server) buildTreeNodes(selectedGroup string) []treeNode {
 
 // ----- page data assembly -----
 
+// compileSearch parses a raw query into a SearchFilter.
+// Returns (nil, false) for empty, (f, false) on success, (nil, true) when invalid.
+func compileSearch(raw string) (*inventory.SearchFilter, bool) {
+	f, err := inventory.ParseSearchFilter(raw)
+	if err != nil {
+		return nil, true
+	}
+	return f, false
+}
+
 func (s *Server) buildPageData(r *http.Request) pageData {
 	q := r.URL.Query()
 	group := q.Get("group")
@@ -87,6 +99,8 @@ func (s *Server) buildPageData(r *http.Request) pageData {
 	host := q.Get("host")
 	varCtx := q.Get("vars") // "group" or "host"
 	status := q.Get("msg")
+	searchQuery := q.Get("q")
+	searchFilter, searchBad := compileSearch(searchQuery)
 
 	// consume one-time server status
 	s.mu.Lock()
@@ -98,10 +112,15 @@ func (s *Server) buildPageData(r *http.Request) pageData {
 	}
 	s.mu.Unlock()
 
-	// hosts for selected group
+	// hosts for selected group, filtered by search when active
 	var hostNames []string
 	if g := s.inv.Group(group); g != nil {
-		hostNames = g.Hosts
+		filterHosts := searchFilter != nil && !searchFilter.MatchGroupName(group)
+		for _, h := range g.Hosts {
+			if !filterHosts || searchFilter.MatchHost(s.inv.Host(h)) {
+				hostNames = append(hostNames, h)
+			}
+		}
 	}
 
 	// resolve vars
@@ -147,12 +166,34 @@ func (s *Server) buildPageData(r *http.Request) pageData {
 		}
 	}
 
+	// filter group tree when search is active
+	allNodes := s.buildTreeNodes(group)
+	var visibleNodes []treeNode
+	for _, node := range allNodes {
+		if searchFilter == nil {
+			visibleNodes = append(visibleNodes, node)
+			continue
+		}
+		if searchFilter.MatchGroupName(node.Name) {
+			visibleNodes = append(visibleNodes, node)
+			continue
+		}
+		if g := s.inv.Group(node.Name); g != nil {
+			for _, h := range g.Hosts {
+				if searchFilter.MatchHost(s.inv.Host(h)) {
+					visibleNodes = append(visibleNodes, node)
+					break
+				}
+			}
+		}
+	}
+
 	return pageData{
 		ReadOnly:      s.readOnly,
 		FilePath:      s.filePath,
 		Modified:      s.modified,
 		Status:        status,
-		Groups:        s.buildTreeNodes(group),
+		Groups:        visibleNodes,
 		SelectedGroup: group,
 		Hosts:         hostNames,
 		SelectedHost:  host,
@@ -161,6 +202,8 @@ func (s *Server) buildPageData(r *http.Request) pageData {
 		Vars:          vars,
 		AllGroupNames: allGroupNames,
 		AllGroups:     allGroups,
+		SearchQuery:   searchQuery,
+		SearchBad:     searchBad,
 		CurrentGroup:  group,
 	}
 }
@@ -211,6 +254,11 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	exportInv := s.inv
+	if f, bad := compileSearch(r.URL.Query().Get("q")); f != nil && !bad {
+		exportInv = s.inv.FilteredInventory(f)
+	}
+
 	tmp, err := os.CreateTemp("", "inv-editor-*.yaml")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -219,7 +267,7 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 	tmp.Close()
 	defer os.Remove(tmp.Name())
 
-	if err := inventory.Save(s.inv, tmp.Name(), inventory.FormatYAML); err != nil {
+	if err := inventory.Save(exportInv, tmp.Name(), inventory.FormatYAML); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

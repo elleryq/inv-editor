@@ -116,6 +116,12 @@ type Model struct {
 	// target group captured when paste of a group-copy opens the rename dialog
 	pasteTargetGroup string
 
+	// search
+	inSearch      bool                     // currently typing in the search bar
+	searchQuery   string                   // raw pattern as typed
+	searchFilter  *inventory.SearchFilter  // compiled filter; nil when empty or invalid
+	searchBad     bool                     // true when searchQuery failed to parse
+
 	// status message
 	statusMsg string
 }
@@ -218,12 +224,55 @@ func (m *Model) buildTree() []treeNode {
 }
 
 func (m *Model) rebuildGroups() {
-	m.treeNodes = m.buildTree()
+	if m.searchFilter != nil {
+		m.treeNodes = m.filteredTreeNodes()
+	} else {
+		m.treeNodes = m.buildTree()
+	}
 	if m.groupIdx >= len(m.treeNodes) {
 		m.groupIdx = max(0, len(m.treeNodes)-1)
 	}
 	m.ensureGroupVisible()
 	m.rebuildHosts()
+}
+
+// filteredTreeNodes returns all groups whose name or hosts match searchFilter,
+// ignoring the expansion state (all matching groups are always visible).
+func (m *Model) filteredTreeNodes() []treeNode {
+	var nodes []treeNode
+	var visit func(name string, depth int)
+	visit = func(name string, depth int) {
+		g := m.inv.Group(name)
+		if g == nil {
+			return
+		}
+		nameMatch := m.searchFilter.MatchGroupName(name)
+		hostMatch := false
+		if !nameMatch {
+			for _, h := range m.inv.HostsInGroup(name) {
+				if m.searchFilter.MatchHost(h) {
+					hostMatch = true
+					break
+				}
+			}
+		}
+		if nameMatch || hostMatch {
+			nodes = append(nodes, treeNode{
+				name:        name,
+				depth:       depth,
+				hasChildren: len(g.Children) > 0,
+				expanded:    true,
+			})
+		}
+		for _, child := range g.Children {
+			visit(child, depth+1)
+		}
+	}
+	visit("all", 0)
+	for _, g := range m.inv.TopLevelGroups() {
+		visit(g.Name, 1)
+	}
+	return nodes
 }
 
 func (m *Model) rebuildHosts() {
@@ -234,11 +283,19 @@ func (m *Model) rebuildHosts() {
 		m.hostScroll = 0
 		return
 	}
-	hosts := m.inv.HostsInGroup(m.currentGroupName())
-	m.hostNames = make([]string, len(hosts))
-	for i, h := range hosts {
-		m.hostNames[i] = h.Name
+	groupName := m.currentGroupName()
+	hosts := m.inv.HostsInGroup(groupName)
+
+	// In search mode, show only matching hosts unless the group itself matched
+	// by name (in which case all its hosts are relevant context).
+	filterHosts := m.searchFilter != nil && !m.searchFilter.MatchGroupName(groupName)
+	var names []string
+	for _, h := range hosts {
+		if !filterHosts || m.searchFilter.MatchHost(h) {
+			names = append(names, h.Name)
+		}
 	}
+	m.hostNames = names
 	if m.hostIdx >= len(m.hostNames) {
 		m.hostIdx = max(0, len(m.hostNames)-1)
 	}
@@ -457,11 +514,37 @@ func (m Model) viewHeader() string {
 }
 
 func (m Model) viewStatusBar() string {
+	// Search input bar takes priority over everything else.
+	if m.inSearch {
+		prefix := styleKey.Render("/") + " "
+		if m.searchBad {
+			prefix = styleDanger.Render("/") + " "
+		}
+		hint := "  " + styleDim.Render("Enter") + " apply  " + styleDim.Render("Esc") + " clear"
+		if m.searchBad {
+			hint = "  " + styleDim.Render("(invalid regex)")
+		}
+		return styleStatusBar.Render(prefix + m.searchQuery + styleDim.Render("▋") + hint)
+	}
+	// Search filter active but not typing.
+	if m.searchQuery != "" {
+		prefix := styleKey.Render("/") + " " + m.searchQuery
+		var suffix string
+		if m.searchBad {
+			suffix = "  " + styleDanger.Render("invalid regex")
+		} else {
+			suffix = fmt.Sprintf("  %s  ", styleDim.Render(fmt.Sprintf("%d group(s)", len(m.treeNodes))))
+			suffix += styleDim.Render("/") + " edit  " + styleDim.Render("Esc") + " clear"
+		}
+		return styleStatusBar.Render(prefix + suffix)
+	}
+	// Normal status / hint bar.
 	if m.statusMsg != "" {
 		return styleStatusBar.Render(m.statusMsg)
 	}
 	keys := []struct{ k, v string }{
 		{"Tab", "next panel"},
+		{"/", "search"},
 		{"n", "new"},
 		{"e", "edit"},
 		{"d", "del"},
@@ -701,8 +784,13 @@ HOSTS PANEL
   After c/m, switch to the Groups panel, select the target
   group, then press p to paste. Esc clears a pending clipboard.
 
+SEARCH  (regex; plain text is a valid regex)
+  /                    open search bar (live-filters Groups + Hosts)
+  Enter                confirm and return to Groups panel (filter stays)
+  Esc                  clear filter and close search bar
+
 FILE
-  s  save   x  export   i  import   q  quit
+  s  save   x  export (filtered when search active)   i  import   q  quit
 
 IMPORT
   i                    merge another inventory file into this one

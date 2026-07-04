@@ -1,6 +1,12 @@
 {{define "groups"}}
 <div class="panel-header">
   <span class="panel-title">Groups</span>
+  <form method="GET" action="/" style="display:contents">
+    <input type="hidden" name="group" value="{{.SelectedGroup}}">
+    <input type="text" name="q" value="{{.SearchQuery}}"
+           placeholder="/ search (regex)…"
+           class="search-input{{if .SearchBad}} bad{{end}}">
+  </form>
 </div>
 <div class="item-list">
   {{range .Groups}}
