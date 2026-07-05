@@ -2,6 +2,7 @@ package web
 
 import (
 	"fmt"
+	"html/template"
 	"io"
 	"net/http"
 	"net/url"
@@ -42,8 +43,13 @@ type pageData struct {
 	AllGroupNames []string // for dropdowns (excluding "all")
 	AllGroups     []string // for dropdowns (including "all")
 	CurrentGroup  string   // the group whose hosts are shown
-	SearchQuery   string   // raw regex string from ?q=
-	SearchBad     bool     // true when the regex is invalid
+	SearchQuery      string       // raw (decoded) query for display in the search input
+	SearchBad        bool         // true when the regex is invalid
+	// Pre-encoded query params as template.URL so html/template never re-encodes them.
+	// Double-encoding would otherwise happen because the urlnormalizer applied by
+	// html/template to href attributes re-encodes '%' chars in already-encoded strings.
+	SearchParam      template.URL // "&q=<encoded>" — appends to URLs that already have params
+	SearchParamFirst template.URL // "?q=<encoded>" — use when q is the first/only param
 }
 
 // ----- tree building -----
@@ -101,6 +107,13 @@ func (s *Server) buildPageData(r *http.Request) pageData {
 	status := q.Get("msg")
 	searchQuery := q.Get("q")
 	searchFilter, searchBad := compileSearch(searchQuery)
+
+	var searchParam, searchParamFirst template.URL
+	if searchQuery != "" {
+		enc := url.QueryEscape(searchQuery)
+		searchParam = template.URL("&q=" + enc)
+		searchParamFirst = template.URL("?q=" + enc)
+	}
 
 	// consume one-time server status
 	s.mu.Lock()
@@ -202,8 +215,10 @@ func (s *Server) buildPageData(r *http.Request) pageData {
 		Vars:          vars,
 		AllGroupNames: allGroupNames,
 		AllGroups:     allGroups,
-		SearchQuery:   searchQuery,
-		SearchBad:     searchBad,
+		SearchQuery:      searchQuery,
+		SearchBad:        searchBad,
+		SearchParam:      searchParam,
+		SearchParamFirst: searchParamFirst,
 		CurrentGroup:  group,
 	}
 }
@@ -223,6 +238,10 @@ func redirectBack(w http.ResponseWriter, r *http.Request, group, host, varCtx, m
 	}
 	if msg != "" {
 		q.Set("msg", msg)
+	}
+	// preserve the search filter across POST redirects
+	if sq := r.FormValue("ctx_q"); sq != "" {
+		q.Set("q", sq)
 	}
 	target := "/?" + q.Encode()
 	if r.Header.Get("HX-Request") == "true" {

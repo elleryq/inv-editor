@@ -28,6 +28,7 @@
           <input type="hidden" name="key"       value="{{.Key}}">
           <input type="hidden" name="ctx_group" value="{{$.SelectedGroup}}">
           <input type="hidden" name="ctx_host"  value="{{$.SelectedHost}}">
+          <input type="hidden" name="ctx_q"     value="{{$.SearchQuery}}">
           <button type="submit" class="btn-icon danger">✕</button>
         </form>
       </td>
@@ -49,6 +50,7 @@
       <input type="hidden" name="subject"   value="{{.VarSubject}}">
       <input type="hidden" name="ctx_group" value="{{.SelectedGroup}}">
       <input type="hidden" name="ctx_host"  value="{{.SelectedHost}}">
+      <input type="hidden" name="ctx_q"     value="{{.SearchQuery}}">
       <div class="form-row">
         <input type="text" name="key"   id="var-key"   placeholder="key"   required>
         <input type="text" name="value" id="var-value" placeholder="value">
