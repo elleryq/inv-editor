@@ -29,11 +29,13 @@
 - `go vet ./...` — 通過
 - `go test ./...` — 通過（`internal/inventory` 測試全過；`tui`/`web`/`cmd` 無測試檔案）
 
-## 未處理的既有問題（超出本次範圍）
+## 既有問題（已修正）
 
-`gofmt -l` 顯示以下檔案有既存的欄位/常數對齊問題，這些問題在本次修改前即已存在，且與 modern-go-guidelines 無關，故未一併調整：
+`gofmt -l` 原本顯示以下檔案有既存的欄位/常數對齊問題（與 modern-go-guidelines 無關，純格式問題）。已執行 `gofmt -w` 修正，`gofmt -l .` 現在無任何輸出：
 
 - `internal/inventory/ini.go`
 - `internal/tui/model.go`
 - `internal/tui/styles.go`
 - `internal/web/handlers.go`
+
+修正後重新執行 `go build ./...`、`go vet ./...`、`go test ./...`，皆通過。

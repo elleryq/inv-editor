@@ -27,12 +27,12 @@ const (
 type mode int
 
 const (
-	modeNormal mode = iota
-	modeInput       // text input dialog
-	modeConfirm     // yes/no confirmation dialog
-	modeExport      // export dialog
-	modeHelp        // help overlay
-	modeMove        // move host: pick target group
+	modeNormal  mode = iota
+	modeInput        // text input dialog
+	modeConfirm      // yes/no confirmation dialog
+	modeExport       // export dialog
+	modeHelp         // help overlay
+	modeMove         // move host: pick target group
 )
 
 // varContext records which entity the Variables panel is currently showing.
@@ -117,10 +117,10 @@ type Model struct {
 	pasteTargetGroup string
 
 	// search
-	inSearch      bool                     // currently typing in the search bar
-	searchQuery   string                   // raw pattern as typed
-	searchFilter  *inventory.SearchFilter  // compiled filter; nil when empty or invalid
-	searchBad     bool                     // true when searchQuery failed to parse
+	inSearch     bool                    // currently typing in the search bar
+	searchQuery  string                  // raw pattern as typed
+	searchFilter *inventory.SearchFilter // compiled filter; nil when empty or invalid
+	searchBad    bool                    // true when searchQuery failed to parse
 
 	// status message
 	statusMsg string

@@ -43,8 +43,8 @@ type pageData struct {
 	AllGroupNames []string // for dropdowns (excluding "all")
 	AllGroups     []string // for dropdowns (including "all")
 	CurrentGroup  string   // the group whose hosts are shown
-	SearchQuery      string       // raw (decoded) query for display in the search input
-	SearchBad        bool         // true when the regex is invalid
+	SearchQuery   string   // raw (decoded) query for display in the search input
+	SearchBad     bool     // true when the regex is invalid
 	// Pre-encoded query params as template.URL so html/template never re-encodes them.
 	// Double-encoding would otherwise happen because the urlnormalizer applied by
 	// html/template to href attributes re-encodes '%' chars in already-encoded strings.
@@ -202,24 +202,24 @@ func (s *Server) buildPageData(r *http.Request) pageData {
 	}
 
 	return pageData{
-		ReadOnly:      s.readOnly,
-		FilePath:      s.filePath,
-		Modified:      s.modified,
-		Status:        status,
-		Groups:        visibleNodes,
-		SelectedGroup: group,
-		Hosts:         hostNames,
-		SelectedHost:  host,
-		VarCtx:        varCtx,
-		VarSubject:    varSubject,
-		Vars:          vars,
-		AllGroupNames: allGroupNames,
-		AllGroups:     allGroups,
+		ReadOnly:         s.readOnly,
+		FilePath:         s.filePath,
+		Modified:         s.modified,
+		Status:           status,
+		Groups:           visibleNodes,
+		SelectedGroup:    group,
+		Hosts:            hostNames,
+		SelectedHost:     host,
+		VarCtx:           varCtx,
+		VarSubject:       varSubject,
+		Vars:             vars,
+		AllGroupNames:    allGroupNames,
+		AllGroups:        allGroups,
 		SearchQuery:      searchQuery,
 		SearchBad:        searchBad,
 		SearchParam:      searchParam,
 		SearchParamFirst: searchParamFirst,
-		CurrentGroup:  group,
+		CurrentGroup:     group,
 	}
 }
 
@@ -642,7 +642,7 @@ func (s *Server) handleSetVar(w http.ResponseWriter, r *http.Request) {
 	if s.guardWrite(w) {
 		return
 	}
-	ctx := r.FormValue("ctx")     // "group" or "host"
+	ctx := r.FormValue("ctx")         // "group" or "host"
 	subject := r.FormValue("subject") // group name or host name
 	key := strings.TrimSpace(r.FormValue("key"))
 	value := r.FormValue("value")

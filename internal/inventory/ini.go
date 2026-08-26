@@ -27,7 +27,7 @@ func ParseINIFile(path string) (*Inventory, error) {
 type sectionKind int
 
 const (
-	kindHosts    sectionKind = iota
+	kindHosts sectionKind = iota
 	kindVars
 	kindChildren
 )

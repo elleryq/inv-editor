@@ -3,14 +3,14 @@ package tui
 import "github.com/charmbracelet/lipgloss"
 
 var (
-	colorBorder      = lipgloss.Color("240")
+	colorBorder       = lipgloss.Color("240")
 	colorActiveBorder = lipgloss.Color("69")
-	colorSelected    = lipgloss.Color("69")
-	colorTitle       = lipgloss.Color("255")
-	colorDim         = lipgloss.Color("240")
-	colorAdd         = lipgloss.Color("34")
-	colorDanger      = lipgloss.Color("196")
-	colorModified    = lipgloss.Color("214")
+	colorSelected     = lipgloss.Color("69")
+	colorTitle        = lipgloss.Color("255")
+	colorDim          = lipgloss.Color("240")
+	colorAdd          = lipgloss.Color("34")
+	colorDanger       = lipgloss.Color("196")
+	colorModified     = lipgloss.Color("214")
 
 	stylePanel = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
