@@ -3,7 +3,7 @@ package inventory
 import (
 	"fmt"
 	"os"
-	"sort"
+	"slices"
 
 	"gopkg.in/yaml.v3"
 )
@@ -193,6 +193,6 @@ func sortedStringKeys(m map[string]string) []string {
 	for k := range m {
 		keys = append(keys, k)
 	}
-	sort.Strings(keys)
+	slices.Sort(keys)
 	return keys
 }

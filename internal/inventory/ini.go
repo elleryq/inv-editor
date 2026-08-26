@@ -5,7 +5,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -121,21 +121,12 @@ func ParseINI(data []byte) (*Inventory, error) {
 			continue
 		}
 		child.Parent = rel.parent
-		if !containsStr(parent.Children, rel.child) {
+		if !slices.Contains(parent.Children, rel.child) {
 			parent.Children = append(parent.Children, rel.child)
 		}
 	}
 
 	return inv, nil
-}
-
-func containsStr(s []string, v string) bool {
-	for _, x := range s {
-		if x == v {
-			return true
-		}
-	}
-	return false
 }
 
 // unquote strips surrounding single or double quotes.
@@ -154,7 +145,7 @@ func splitVars(s string) []string {
 	var cur strings.Builder
 	inQuote := false
 	quoteChar := byte(0)
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		c := s[i]
 		if inQuote {
 			cur.WriteByte(c)
@@ -242,6 +233,6 @@ func sortedKeys(m map[string]string) []string {
 	for k := range m {
 		keys = append(keys, k)
 	}
-	sort.Strings(keys)
+	slices.Sort(keys)
 	return keys
 }

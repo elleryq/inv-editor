@@ -2,6 +2,7 @@ package inventory
 
 import (
 	"fmt"
+	"maps"
 	"regexp"
 	"slices"
 	"strings"
@@ -411,12 +412,9 @@ func (inv *Inventory) CopyGroupDeep(srcName, targetParent, newName string) strin
 	clone = func(orig *Group, parent, name string) string {
 		// snapshot before AddGroupUnder mutates orig.Children (relevant when
 		// parent == orig.Name, i.e. copying a group under itself).
-		children := append([]string(nil), orig.Children...)
-		hosts := append([]string(nil), orig.Hosts...)
-		vars := make(map[string]string, len(orig.Vars))
-		for k, v := range orig.Vars {
-			vars[k] = v
-		}
+		children := slices.Clone(orig.Children)
+		hosts := slices.Clone(orig.Hosts)
+		vars := maps.Clone(orig.Vars)
 
 		if !inv.AddGroupUnder(parent, name) {
 			return ""
@@ -653,9 +651,7 @@ func (inv *Inventory) MergeFrom(other *Inventory) (newGroups, newHosts int) {
 	for name, h := range other.hosts {
 		existing := inv.hosts[name]
 		if existing == nil {
-			vars := make(map[string]string, len(h.Vars))
-			mergeVars(vars, h.Vars)
-			inv.hosts[name] = &Host{Name: name, Vars: vars}
+			inv.hosts[name] = &Host{Name: name, Vars: maps.Clone(h.Vars)}
 			newHosts++
 			continue
 		}

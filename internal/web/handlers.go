@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/elleryq/inv-editor/internal/inventory"
@@ -151,7 +151,7 @@ func (s *Server) buildPageData(r *http.Request) pageData {
 			for k := range g.Vars {
 				keys = append(keys, k)
 			}
-			sort.Strings(keys)
+			slices.Sort(keys)
 			for _, k := range keys {
 				vars = append(vars, varEntry{Key: k, Value: g.Vars[k]})
 			}
@@ -162,7 +162,7 @@ func (s *Server) buildPageData(r *http.Request) pageData {
 			for k := range h.Vars {
 				keys = append(keys, k)
 			}
-			sort.Strings(keys)
+			slices.Sort(keys)
 			for _, k := range keys {
 				vars = append(vars, varEntry{Key: k, Value: h.Vars[k]})
 			}
