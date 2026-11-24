@@ -16,11 +16,13 @@ USAGE
   inv-editor <inventory-file>
   inv-editor serve <inventory-file> [flags]
   inv-editor help | --help | -h
+  inv-editor version | --version
 
 SUBCOMMANDS
   (none)   Open inventory file in the terminal UI (TUI).
            Create a new file if it does not exist.
   serve    Start a web interface for the inventory file.
+  version  Print the version and exit.
 
 TUI CONTROLS
   Tab / Shift+Tab   Cycle between panels (Groups → Hosts → Variables)
@@ -66,6 +68,9 @@ func main() {
 	case "help", "--help", "-h":
 		fmt.Print(helpText)
 		os.Exit(0)
+	case "version", "--version":
+		fmt.Println("inv-editor", buildVersion())
+		os.Exit(0)
 	case "serve":
 		runServe(os.Args[2:])
 	default:
@@ -76,7 +81,7 @@ func main() {
 func printUsageShort() {
 	fmt.Fprintln(os.Stderr, "usage: inv-editor <inventory-file>")
 	fmt.Fprintln(os.Stderr, "       inv-editor serve <inventory-file> [--host H] [--port P] [--readonly]")
-	fmt.Fprintln(os.Stderr, "       inv-editor --help")
+	fmt.Fprintln(os.Stderr, "       inv-editor --help | --version")
 }
 
 func runTUI(filePath string) {
