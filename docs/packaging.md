@@ -1,7 +1,7 @@
 # Debian 套件打包規劃
 
 > 對應 issue：[#3 Release 的 assets 包含 debian package](https://github.com/elleryq/inv-editor/issues/3)
-> 狀態：規劃完成，待實作
+> 狀態：實作中（PR 1 已完成，PR 2 進行中）
 
 ## 目標
 
@@ -37,7 +37,9 @@ sudo apt install ./inv-editor_1.4.0_amd64.deb
 | 整個改用 GoReleaser | 一次處理 build、打包、checksum、Release | 要重寫整個 `release.yml`，改動範圍遠大於這個 issue |
 | debhelper / `dh-golang` | Debian 官方正規做法 | 需要 vendoring 和完整的 `debian/` 目錄，適合送官方套件庫，不適合 GitHub Release |
 
-**建議用 nfpm**，固定版本為目前最新的 `v2.49.0`。
+**採用 nfpm**，固定版本 `v2.49.0`。
+
+nfpm v2.49.0 本身需要 Go ≥ 1.27.4 才能編譯，比專案用的 Go 1.26 新，所以不用 `go install`，改下載官方編好的 binary。下載後用寫死在 [install-nfpm.sh](../packaging/deb/install-nfpm.sh) 裡的 SHA-256 驗證，檔案被換掉時 CI 會直接失敗。要升級 nfpm 時，同時更新版本號和兩個 hash。
 
 ## 套件規格
 
@@ -62,87 +64,47 @@ sudo apt install ./inv-editor_1.4.0_amd64.deb
 |---|---|---|
 | `/usr/bin/inv-editor` | 編好的執行檔 | 0755 |
 | `/usr/share/doc/inv-editor/copyright` | `LICENSE` | 0644 |
+| `/usr/share/doc/inv-editor/changelog.gz` | 打包時產生 | 0644 |
 | `/usr/share/doc/inv-editor/README.md` | `README.md` | 0644 |
+| `/usr/share/lintian/overrides/inv-editor` | `packaging/deb/lintian-overrides` | 0644 |
 
 ## 實作步驟
 
-### 前置工作
+### 前置工作（已完成，PR #6）
 
-**加上 `--version`**：.deb 有版本號，但使用者裝完之後沒辦法從程式確認版本，回報問題時也不方便。
+加上 `inv-editor version` / `--version`。版本來源依序為 ldflags 嵌入的 tag、Go 工具鏈記錄的 module 版本、`dev`；`release.yml` 在 build 時用 `-X main.version=<tag>` 嵌入。
 
-- `cmd/inv-editor/main.go` 加 `var version = "dev"`，並處理 `version` / `--version` 子命令。
-- `release.yml` 的 build 步驟加 `-X main.version=${VERSION}`。
-- `go install` 或自己 build 時沒有 ldflags，可以改用 `runtime/debug.ReadBuildInfo()` 讀取 module 版本當備案。
+### 1. 打包檔案（`packaging/deb/`）
 
-### 1. 新增 `nfpm.yaml`
+根目錄的 `.gitignore` 忽略所有 `*.yaml`（避免誤提交使用者的 inventory），所以打包設定集中放在 `packaging/deb/`，並在 `.gitignore` 加上 `!packaging/**/*.yaml` 例外。
 
-放在 repo 根目錄，版本和架構由環境變數帶入：
+| 檔案 | 用途 |
+|---|---|
+| [nfpm.yaml](../packaging/deb/nfpm.yaml) | 套件欄位和安裝內容；`DEB_ARCH`、`DEB_VERSION` 由環境變數帶入。`version_schema: semver` 讓 nfpm 把 `1.4.0-rc1` 轉成 `1.4.0~rc1` |
+| [build.sh](../packaging/deb/build.sh) | `build.sh <binary> <tag> <arch> <out-dir>`：檢查 tag 格式與架構、把檔案放到 `build/deb/`、產生 changelog、呼叫 nfpm。CI 和 release 共用這支腳本 |
+| [install-nfpm.sh](../packaging/deb/install-nfpm.sh) | 下載固定版本的 nfpm binary 並驗證 SHA-256 |
+| [lintian-overrides](../packaging/deb/lintian-overrides) | 說明靜態編譯是刻意的 |
 
-```yaml
-name: inv-editor
-arch: ${DEB_ARCH}
-platform: linux
-version: ${DEB_VERSION}
-version_schema: semver
-section: admin
-priority: optional
-maintainer: "Ellery Tsai <22297+elleryq@users.noreply.github.com>"
-description: |
-  Interactive editor for Ansible inventory files.
-  Provides a keyboard-driven terminal UI and an optional web interface
-  for managing groups, hosts and variables in INI or YAML inventories.
-homepage: https://github.com/elleryq/inv-editor
-license: MIT
-suggests:
-  - ansible
-contents:
-  - src: ./inv-editor
-    dst: /usr/bin/inv-editor
-    file_info:
-      mode: 0755
-  - src: ./LICENSE
-    dst: /usr/share/doc/inv-editor/copyright
-    file_info:
-      mode: 0644
-  - src: ./README.md
-    dst: /usr/share/doc/inv-editor/README.md
-    file_info:
-      mode: 0644
-```
+**lintian 處理**：第一次跑 lintian 出現兩個 error 和一個 warning。
 
-`version_schema: semver` 會讓 nfpm 把 `1.4.0-rc1` 拆成 `1.4.0~rc1`，處理預發版的排序。
+- `no-changelog`：Debian policy 要求 native package 附 `changelog.gz`。`build.sh` 產生一份最小的 Debian changelog，日期用 release commit 的時間，重新 build 也會得到相同內容。
+- `statically-linked-binary`：Go 用 `CGO_ENABLED=0` 刻意靜態編譯。比照 Debian 的 Go 套件，附 lintian override。
+- `no-manual-page`（warning）：先保留，man page 列在[後續擴充](#後續擴充)。
 
 ### 2. 修改 `release.yml`
 
-在 `build` job 的 linux matrix 項目加一個打包步驟。產生的 .deb 跟 tar.gz 一起上傳成同一個 artifact，`release` job 完全不用改：
+linux matrix 項目在 build 之後多兩個步驟：`install-nfpm.sh` 安裝 nfpm，`build.sh` 產生 .deb。tag 透過 `env` 傳入，不直接把 `${{ github.ref_name }}` 寫進 `run:`。
 
-```yaml
-      - name: Build .deb
-        if: matrix.goos == 'linux'
-        env:
-          DEB_ARCH: ${{ matrix.goarch }}
-          NFPM_VERSION: v2.49.0
-        run: |
-          export DEB_VERSION="${GITHUB_REF_NAME#v}"
-          go install github.com/goreleaser/nfpm/v2/cmd/nfpm@"${NFPM_VERSION}"
-          nfpm package --packager deb --config nfpm.yaml --target .
-```
-
-另外要修改：
-
-- `Package archive` 步驟把 .deb 檔名也寫進 `$GITHUB_OUTPUT`，或者 `upload-artifact` 的 `path` 改成多行，同時列 tar.gz 和 `*.deb`。
-- `GITHUB_REF_NAME` 透過 `env` 讀取，不直接把 `${{ github.ref_name }}` 寫進 `run:`。
+.deb 要輸出到工作目錄根層，跟 tar.gz 放在一起。`upload-artifact` 收到多個路徑時，會以它們的共同上層目錄當根目錄；如果 .deb 放在子目錄，`release` job 的 `dist/` 裡會多一層資料夾，`sha256sum *` 和 `gh release create dist/*` 都會出錯。放在根層的話，`release` job 不用改，`SHA256SUMS.txt` 也會自動包含 .deb。
 
 ### 3. 在 CI 驗證打包
 
-`ci.yml` 加一個 job，在 PR 上就先檢查 .deb 的內容，避免發版當下才發現問題：
+`ci.yml` 新增 `deb` job，amd64 跑在 `ubuntu-latest`，arm64 跑在 `ubuntu-24.04-arm`，兩種架構都實際安裝：
 
-1. 用 `DEB_VERSION=0.0.0~ci` 產生 amd64 的 .deb。
-2. `dpkg-deb --info` 和 `dpkg-deb --contents` 檢查欄位和檔案清單。
-3. `lintian` 檢查（警告先不擋，只擋 error）。
-4. `sudo apt install ./inv-editor_*.deb`，接著跑 `inv-editor --help` 和 `inv-editor --version`，最後 `sudo apt remove inv-editor`。
-
-arm64 可以用 GitHub 的 `ubuntu-24.04-arm` runner 做同樣的安裝測試；如果覺得成本太高，至少用 `dpkg-deb --info` 確認 Architecture 欄位正確。
+1. 用 tag `v0.0.0-ci` build 執行檔並產生 .deb（套件版本 `0.0.0~ci`）。
+2. `dpkg-deb --info` / `--contents`，並確認 `Architecture` 和 `Version` 欄位。
+3. `lintian --fail-on error`（warning 不擋）。
+4. `apt-get install` 安裝，確認 `inv-editor --version` 輸出 `inv-editor 0.0.0-ci`、`--help` 正常，再 `apt-get remove` 並確認執行檔已移除。
 
 ### 4. 更新文件
 
@@ -161,8 +123,8 @@ arm64 可以用 GitHub 的 `ubuntu-24.04-arm` runner 做同樣的安裝測試；
 
 | PR | 內容 | 依賴 |
 |---|---|---|
-| 1 | 加 `--version`，`release.yml` 嵌入版本號 | 無 |
-| 2 | 新增 `nfpm.yaml`、`release.yml` 打包步驟、`ci.yml` 驗證 job | PR 1 |
+| 1 | 加 `--version`，`release.yml` 嵌入版本號（#6，已合併） | 無 |
+| 2 | 新增 `packaging/deb/`、`release.yml` 打包步驟、`ci.yml` 驗證 job | PR 1 |
 | 3 | README 安裝說明與 `go install` 路徑修正 | PR 2 |
 
 PR 2 和 PR 3 可以合併成一個。
@@ -176,7 +138,7 @@ PR 2 和 PR 3 可以合併成一個。
 ## 後續擴充
 
 - **APT repository**：用 GitHub Pages 加 `reprepro` 或 `aptly` 架設，需要 GPG 簽章金鑰和保管流程，使用者才能 `apt update` 自動更新。
-- **rpm / apk**：nfpm 的 `--packager rpm` / `apk`，用同一份 `nfpm.yaml`。
+- **rpm / apk**：nfpm 的 `--packager rpm` / `apk`，用同一份 `nfpm.yaml`（changelog 和 lintian override 只適用 deb，要另外處理）。
 - **man page**：從 `helpText` 產生 `inv-editor.1`，安裝到 `/usr/share/man/man1/`。
 - **shell completion**：目前子命令很少，需求不高。
 - **systemd unit**：如果有人要把 `serve --readonly` 當常駐服務，可以附一個停用狀態的範本 unit。

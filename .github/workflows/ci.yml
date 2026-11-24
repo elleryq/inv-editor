@@ -48,3 +48,63 @@ jobs:
 
       - name: Test
         run: go test -race ./...
+
+  deb:
+    name: Debian package (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    env:
+      TAG: v0.0.0-ci
+      DEB_ARCH: ${{ matrix.arch }}
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build binary
+        env:
+          CGO_ENABLED: 0
+        run: |
+          go build -trimpath -ldflags="-s -w -X main.version=${TAG}" \
+            -o build/inv-editor ./cmd/inv-editor
+
+      - name: Install nfpm
+        run: |
+          packaging/deb/install-nfpm.sh "$RUNNER_TEMP/bin"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+
+      - name: Build .deb
+        run: packaging/deb/build.sh build/inv-editor "$TAG" "$DEB_ARCH" build/out
+
+      - name: Inspect package
+        run: |
+          deb="build/out/inv-editor_0.0.0~ci_${DEB_ARCH}.deb"
+          dpkg-deb --info "$deb"
+          dpkg-deb --contents "$deb"
+          test "$(dpkg-deb --field "$deb" Architecture)" = "$DEB_ARCH"
+          test "$(dpkg-deb --field "$deb" Version)" = "0.0.0~ci"
+
+      - name: Lintian
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq lintian
+          lintian --fail-on error build/out/*.deb
+
+      - name: Install, run and remove
+        run: |
+          sudo apt-get install -y "./build/out/inv-editor_0.0.0~ci_${DEB_ARCH}.deb"
+          test "$(inv-editor --version)" = "inv-editor 0.0.0-ci"
+          inv-editor --help > /dev/null
+          sudo apt-get remove -y inv-editor
+          test ! -e /usr/bin/inv-editor

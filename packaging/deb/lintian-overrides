@@ -1,0 +1,2 @@
+# Go binaries are built with CGO_ENABLED=0 and are statically linked on purpose.
+inv-editor: statically-linked-binary [usr/bin/inv-editor]

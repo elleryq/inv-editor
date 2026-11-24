@@ -46,6 +46,21 @@ jobs:
           go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" \
             -o "inv-editor${EXT}" ./cmd/inv-editor
 
+      - name: Install nfpm
+        if: matrix.goos == 'linux'
+        run: |
+          packaging/deb/install-nfpm.sh "$RUNNER_TEMP/bin"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+
+      # Written to the workspace root next to the archive so that
+      # upload-artifact keeps a flat layout for the release job.
+      - name: Build .deb
+        if: matrix.goos == 'linux'
+        env:
+          TAG: ${{ github.ref_name }}
+          DEB_ARCH: ${{ matrix.goarch }}
+        run: packaging/deb/build.sh inv-editor "$TAG" "$DEB_ARCH" .
+
       - name: Package archive
         id: archive
         env:
@@ -65,7 +80,9 @@ jobs:
       - uses: actions/upload-artifact@v7
         with:
           name: dist-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: ${{ steps.archive.outputs.file }}
+          path: |
+            ${{ steps.archive.outputs.file }}
+            inv-editor_*.deb
           if-no-files-found: error
 
   release:
