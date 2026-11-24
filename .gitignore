@@ -19,3 +19,10 @@ build/
 # Exception: GitHub Actions workflows
 !.github/
 !.github/**
+
+# Exception: packaging config
+!packaging/**/*.yaml
+
+# Release build artifacts (see .github/workflows/release.yml)
+/inv-editor
+/inv-editor_*.deb
