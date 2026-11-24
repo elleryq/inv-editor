@@ -42,6 +42,9 @@ inv-editor serve vc8.yaml                            # default: 127.0.0.1:8080
 inv-editor serve vc8.yaml --port 9090
 inv-editor serve vc8.yaml --host 127.0.0.1           # local only
 inv-editor serve vc8.yaml --host 0.0.0.0 --readonly  # read-only mode
+
+# Show version
+inv-editor --version
 ```
 
 ## TUI Controls

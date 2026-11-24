@@ -17,6 +17,15 @@ inv-editor <file>
 - If `<file>` does not exist, start with an empty inventory (creates file on save).
 - If `<file>` exists, detect format automatically (INI vs YAML by extension and content).
 
+```
+inv-editor version | --version
+```
+
+- Prints `inv-editor <version>` (without a leading `v`) and exits.
+- Version source, first available wins: the tag embedded at release build time
+  (`-ldflags "-X main.version=<tag>"`), the module version recorded by the Go
+  toolchain (`go install ...@vX.Y.Z` or VCS info for local builds), then `dev`.
+
 ---
 
 ## Ansible Inventory Model
