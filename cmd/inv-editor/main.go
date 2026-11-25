@@ -17,7 +17,7 @@ const helpText = `inv-editor — terminal Ansible inventory editor
 
 USAGE
   inv-editor <inventory-file>
-  inv-editor serve <inventory-file> [flags]
+  inv-editor serve [flags] <inventory-file>
   inv-editor help | --help | -h
   inv-editor version | --version
 
@@ -27,38 +27,34 @@ SUBCOMMANDS
   serve    Start a web interface for the inventory file.
   version  Print the version and exit.
 
-TUI CONTROLS
-  Tab / Shift+Tab   Cycle between panels (Groups → Hosts → Variables)
-  G / H / V         Jump to Groups / Hosts / Variables panel
-  ↑ ↓  or  j k      Navigate items
-  Shift+← →         Scroll panel left / right (horizontal)
-  n                 New item (group, host, or variable)
-  e / Enter         Edit selected item
-  d / Delete        Delete selected item
-  m                 Move host to another group
-  c                 Copy host to another group
-  M                 Move (reparent) group under a different parent
-  v                 Open variables for the selected group or host
-  s                 Save to original file
-  x                 Export to a different format / path
-  q                 Quit (prompts to save if modified)
-  ?                 Toggle help overlay
-
-SERVE FLAGS
+SERVE FLAGS (before or after <inventory-file>)
   --host string     Address to listen on (default "127.0.0.1")
   --port int        Port to listen on (default 8080)
   --readonly        Start in read-only mode (mutations return 403)
 
+COMMON TUI KEYS
+  Tab / Shift+Tab   Cycle panels (Groups → Hosts → Variables)
+  ↑ ↓  or  j k      Navigate items
+  n / e / d         New / edit / delete item
+  Space             Select multiple hosts (Hosts panel)
+  c / m, then p     Copy / move host(s) or group, paste into the group
+                    selected in the Groups panel
+  /                 Search names (regex), or key=regex for host variables
+  s / x / i         Save / export / import
+  q                 Quit (prompts to save if modified)
+  ?                 Help overlay with all keys
+
 EXAMPLES
   inv-editor vc8.ini
   inv-editor new-inventory.yaml
-  inv-editor serve vc8.yaml --port 9090
-  inv-editor serve vc8.yaml --host 127.0.0.1
-  inv-editor serve vc8.yaml --host 0.0.0.0 --readonly
+  inv-editor serve --port 9090 vc8.yaml
+  inv-editor serve --host 0.0.0.0 --readonly vc8.yaml
 
 SUPPORTED FORMATS
   Read/write: INI (.ini, .cfg)  |  YAML (.yml, .yaml)
   /download endpoint always returns YAML.
+
+Full reference: man inv-editor
 `
 
 func main() {
@@ -83,7 +79,7 @@ func main() {
 
 func printUsageShort() {
 	fmt.Fprintln(os.Stderr, "usage: inv-editor <inventory-file>")
-	fmt.Fprintln(os.Stderr, "       inv-editor serve <inventory-file> [--host H] [--port P] [--readonly]")
+	fmt.Fprintln(os.Stderr, "       inv-editor serve [--host H] [--port P] [--readonly] <inventory-file>")
 	fmt.Fprintln(os.Stderr, "       inv-editor --help | --version")
 }
 
@@ -105,13 +101,10 @@ type serveOptions struct {
 
 var errMissingInventoryFile = errors.New("missing inventory file")
 
-// parseServeArgs parses the serve subcommand's arguments. Flags may be given
-// before or after the inventory file ("serve --readonly inv.yaml" and
-// "serve inv.yaml --readonly" are equivalent). The standard flag package
-// stops at the first non-flag argument, so flags after the file are parsed
-// in a second pass instead of being silently ignored.
-// Parse errors and usage are written to output.
-func parseServeArgs(args []string, output io.Writer) (*serveOptions, error) {
+// newServeFlags defines the serve subcommand's flags, writing parse errors and
+// usage to output. Every flag defined here must be documented in
+// docs/man/inv-editor.1.md (checked by manpage_test.go).
+func newServeFlags(output io.Writer) (*flag.FlagSet, *serveOptions) {
 	opts := &serveOptions{}
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
 	fs.SetOutput(output)
@@ -119,10 +112,21 @@ func parseServeArgs(args []string, output io.Writer) (*serveOptions, error) {
 	fs.IntVar(&opts.port, "port", 8080, "port to listen on")
 	fs.BoolVar(&opts.readonly, "readonly", false, "start in read-only mode")
 	fs.Usage = func() {
-		fmt.Fprintln(output, "usage: inv-editor serve <inventory-file> [flags]")
+		fmt.Fprintln(output, "usage: inv-editor serve [flags] <inventory-file>")
 		fmt.Fprintln(output)
 		fs.PrintDefaults()
 	}
+	return fs, opts
+}
+
+// parseServeArgs parses the serve subcommand's arguments. Flags may be given
+// before or after the inventory file ("serve --readonly inv.yaml" and
+// "serve inv.yaml --readonly" are equivalent). The standard flag package
+// stops at the first non-flag argument, so flags after the file are parsed
+// in a second pass instead of being silently ignored.
+// Parse errors and usage are written to output.
+func parseServeArgs(args []string, output io.Writer) (*serveOptions, error) {
+	fs, opts := newServeFlags(output)
 
 	if err := fs.Parse(args); err != nil {
 		return nil, err

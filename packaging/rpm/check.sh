@@ -19,6 +19,9 @@ rpm -qlvp "$rpm_file"
 test "$(rpm -qp --qf '%{ARCH}' "$rpm_file")" = "$want_arch"
 test "$(rpm -qp --qf '%{VERSION}' "$rpm_file")" = "$want_version"
 rpm -qp --changelog "$rpm_file" | grep -q -- "- ${want_version}-1\$"
+# Checked in the package rather than on disk: Fedora images set
+# tsflags=nodocs, which skips %doc files such as the man page.
+rpm -qdp "$rpm_file" | grep -qx /usr/share/man/man1/inv-editor.1.gz
 
 if [ "$lint" = lint ]; then
   dnf install -y -q rpmlint
