@@ -1,7 +1,7 @@
 # Linux 套件打包（.deb / RPM）
 
 > 對應 issue：[#3 Release 的 assets 包含 debian package](https://github.com/elleryq/inv-editor/issues/3)、[#4 Release 的 assets 包含 RPM package](https://github.com/elleryq/inv-editor/issues/4)
-> 狀態：.deb 完成（v1.4.0 起）；RPM 實作中，預計 v1.5.0 起提供，見 [RPM](#rpm)
+> 狀態：完成。.deb 自 v1.4.0 起、RPM 自 v1.5.0 起附在 Release，見 [RPM](#rpm)
 
 前半部是 .deb 的規劃與實作紀錄（#3），[RPM](#rpm) 一節是後來加上的 RPM 支援（#4）。
 
@@ -213,6 +213,14 @@ ubuntu runner 不需要另外安裝 rpm 工具；arm64 runner 用 arm64 的容�
 - Fedora、AlmaLinux 9 安裝 `1.5.0~rc1`，再 `dnf upgrade` 到 `1.5.0`，版本正確，移除正常。
 - Fedora 的容器 image 預設 `tsflags=nodocs`，安裝後沒有 `/usr/share/doc/inv-editor`，這正好表示 README 有正確標成 `%doc`；AlmaLinux 會安裝 README。
 - deb 的內容和 lintian 結果跟 v1.4.0 相同。
+
+### v1.5.0 驗證結果
+
+- Release 有 `inv-editor-1.5.0-1.x86_64.rpm` 和 `inv-editor-1.5.0-1.aarch64.rpm`，`SHA256SUMS.txt` 的 9 個檔案 `sha256sum -c` 全部通過。
+- RPM 版本 `1.5.0-1`，README 和 man page 是 `%doc`、LICENSE 是 `%license`，`%changelog` 是 `1.5.0-1`；rpmlint 0 個 error，只有預期中的 PIE warning。
+- 兩個 .deb 的 lintian `--fail-on warning` 沒有任何輸出。
+- 照 README 的步驟在 `almalinux:9`、`fedora:latest`（RPM）和 `debian:stable`（.deb）從 GitHub 下載、驗證 checksum、安裝、執行、移除，`--version` 都是 `1.5.0`；`serve <file> --port 9099 --readonly` 也正確生效（#14）。
+- arm64 跟 v1.4.0 一樣只確認了套件欄位，安裝流程由 CI 在 `ubuntu-24.04-arm` runner 上驗證。
 
 ### 已決定事項
 
