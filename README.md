@@ -16,15 +16,47 @@ Built with Go + [Bubble Tea](https://github.com/charmbracelet/bubbletea).
 
 ## Installation
 
+### Debian / Ubuntu (.deb)
+
+`.deb` packages for `amd64` and `arm64` are attached to each [release](https://github.com/elleryq/inv-editor/releases) starting from v1.4.0.
+
 ```bash
-# Build from source
+VERSION=1.4.0                        # replace with the latest release
+ARCH=$(dpkg --print-architecture)    # amd64 or arm64
+curl -LO "https://github.com/elleryq/inv-editor/releases/download/v${VERSION}/inv-editor_${VERSION}_${ARCH}.deb"
+
+# Optional: verify the checksum
+curl -LO "https://github.com/elleryq/inv-editor/releases/download/v${VERSION}/SHA256SUMS.txt"
+sha256sum --ignore-missing -c SHA256SUMS.txt
+
+sudo apt install "./inv-editor_${VERSION}_${ARCH}.deb"
+inv-editor --version
+
+# Uninstall
+sudo apt remove inv-editor
+```
+
+There is no APT repository yet, so upgrades are done by installing the newer `.deb` the same way.
+
+### Prebuilt binaries
+
+Each [release](https://github.com/elleryq/inv-editor/releases) also includes archives for Linux (`amd64`, `arm64`), macOS (`amd64`, `arm64`) and Windows (`amd64`). Extract `inv-editor` (or `inv-editor.exe`) and put it somewhere on your `PATH`.
+
+### go install
+
+Requires Go 1.26 or later.
+
+```bash
+go install github.com/elleryq/inv-editor/cmd/inv-editor@latest
+```
+
+### Build from source
+
+```bash
 git clone https://github.com/elleryq/inv-editor
 cd inv-editor
 mkdir build
 go build -o build/inv-editor ./cmd/inv-editor
-
-# Or install directly
-go install github.com/elleryq/inv-editor@latest
 ```
 
 ## Usage
@@ -212,7 +244,9 @@ inv-editor/
 │       └── templates/  # Embedded HTML templates
 ├── docs/
 │   ├── SPEC.md         # Full functional specification
-│   └── INVENTORY-GUIDELINE.md
+│   ├── INVENTORY-GUIDELINE.md
+│   └── packaging.md    # Debian package design notes
+├── packaging/deb/      # nfpm config and build scripts for the .deb
 └── README.md
 ```
 
