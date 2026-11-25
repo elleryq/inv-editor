@@ -1,9 +1,12 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
+	"strings"
 
 	"github.com/elleryq/inv-editor/internal/inventory"
 	"github.com/elleryq/inv-editor/internal/tui"
@@ -92,39 +95,79 @@ func runTUI(filePath string) {
 	}
 }
 
-func runServe(args []string) {
-	fs := flag.NewFlagSet("serve", flag.ExitOnError)
-	host := fs.String("host", "127.0.0.1", "address to listen on")
-	port := fs.Int("port", 8080, "port to listen on")
-	readonly := fs.Bool("readonly", false, "start in read-only mode")
+// serveOptions holds the parsed arguments of the serve subcommand.
+type serveOptions struct {
+	filePath string
+	host     string
+	port     int
+	readonly bool
+}
 
+var errMissingInventoryFile = errors.New("missing inventory file")
+
+// parseServeArgs parses the serve subcommand's arguments. Flags may be given
+// before or after the inventory file ("serve --readonly inv.yaml" and
+// "serve inv.yaml --readonly" are equivalent). The standard flag package
+// stops at the first non-flag argument, so flags after the file are parsed
+// in a second pass instead of being silently ignored.
+// Parse errors and usage are written to output.
+func parseServeArgs(args []string, output io.Writer) (*serveOptions, error) {
+	opts := &serveOptions{}
+	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
+	fs.SetOutput(output)
+	fs.StringVar(&opts.host, "host", "127.0.0.1", "address to listen on")
+	fs.IntVar(&opts.port, "port", 8080, "port to listen on")
+	fs.BoolVar(&opts.readonly, "readonly", false, "start in read-only mode")
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "usage: inv-editor serve <inventory-file> [flags]")
-		fmt.Fprintln(os.Stderr)
+		fmt.Fprintln(output, "usage: inv-editor serve <inventory-file> [flags]")
+		fmt.Fprintln(output)
 		fs.PrintDefaults()
 	}
 
 	if err := fs.Parse(args); err != nil {
-		os.Exit(1)
+		return nil, err
 	}
 	if fs.NArg() < 1 {
 		fs.Usage()
-		os.Exit(1)
+		return nil, errMissingInventoryFile
 	}
-	filePath := fs.Arg(0)
+	opts.filePath = fs.Arg(0)
 
-	inv, format := loadOrNew(filePath)
+	if err := fs.Parse(fs.Args()[1:]); err != nil {
+		return nil, err
+	}
+	if fs.NArg() > 0 {
+		err := fmt.Errorf("unexpected arguments after inventory file: %s", strings.Join(fs.Args(), " "))
+		fmt.Fprintln(output, err)
+		fs.Usage()
+		return nil, err
+	}
+	return opts, nil
+}
 
-	srv, err := web.NewServer(inv, filePath, format, web.Options{
-		Host:     *host,
-		Port:     *port,
-		ReadOnly: *readonly,
+func runServe(args []string) {
+	opts, err := parseServeArgs(args, os.Stderr)
+	switch {
+	case errors.Is(err, flag.ErrHelp):
+		os.Exit(0)
+	case errors.Is(err, errMissingInventoryFile):
+		os.Exit(1)
+	case err != nil:
+		os.Exit(2) // same as flag.ExitOnError
+	}
+
+	inv, format := loadOrNew(opts.filePath)
+
+	srv, err := web.NewServer(inv, opts.filePath, format, web.Options{
+		Host:     opts.host,
+		Port:     opts.port,
+		ReadOnly: opts.readonly,
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "web server init error: %v\n", err)
 		os.Exit(1)
 	}
-	if err := srv.Start(*host, *port); err != nil {
+	if err := srv.Start(opts.host, opts.port); err != nil {
 		fmt.Fprintf(os.Stderr, "server error: %v\n", err)
 		os.Exit(1)
 	}
