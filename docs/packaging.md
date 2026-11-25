@@ -1,7 +1,7 @@
 # Debian 套件打包規劃
 
 > 對應 issue：[#3 Release 的 assets 包含 debian package](https://github.com/elleryq/inv-editor/issues/3)
-> 狀態：實作中（PR 1、PR 2 已完成，PR 3 進行中），待 v1.4.0 發版驗證
+> 狀態：完成，v1.4.0 起 Release 附上 .deb
 
 ## 目標
 
@@ -115,9 +115,15 @@ linux matrix 項目在 build 之後多兩個步驟：`install-nfpm.sh` 安裝 nf
 
 發 `v1.4.0`（新增 `--version` 功能，所以升 minor 版本）之後確認：
 
-- Release assets 有 `inv-editor_1.4.0_amd64.deb` 和 `inv-editor_1.4.0_arm64.deb`
-- `SHA256SUMS.txt` 有這兩個檔案，`sha256sum -c` 通過
-- 在乾淨的 Debian 和 Ubuntu 容器各安裝一次，`inv-editor --version` 顯示 `1.4.0`
+- [x] Release assets 有 `inv-editor_1.4.0_amd64.deb` 和 `inv-editor_1.4.0_arm64.deb`
+- [x] `SHA256SUMS.txt` 有這兩個檔案，`sha256sum -c` 通過
+- [x] 在乾淨的 Debian 和 Ubuntu 容器各安裝一次，`inv-editor --version` 顯示 `1.4.0`
+
+v1.4.0 驗證結果：
+
+- 照 README 的步驟在 `debian:stable-slim` 和 `ubuntu:24.04`（amd64）從 GitHub 下載、驗證 checksum、安裝、執行、移除，都正常。
+- arm64 的 .deb 沒有在本機實際安裝，因為本機沒有 arm64 模擬環境。已確認套件裡的執行檔是 ARM aarch64、嵌入的版本是 `v1.4.0`；安裝流程由 CI 的 `deb` job 在 `ubuntu-24.04-arm` runner 上驗證。
+- lintian 沒有 error，只有預期中的 `no-manual-page` warning。
 
 ## 建議的 PR 拆分
 
@@ -125,7 +131,7 @@ linux matrix 項目在 build 之後多兩個步驟：`install-nfpm.sh` 安裝 nf
 |---|---|---|
 | 1 | 加 `--version`，`release.yml` 嵌入版本號（#6，已合併） | 無 |
 | 2 | 新增 `packaging/deb/`、`release.yml` 打包步驟、`ci.yml` 驗證 job（#7，已合併） | PR 1 |
-| 3 | README 安裝說明與 `go install` 路徑修正 | PR 2 |
+| 3 | README 安裝說明與 `go install` 路徑修正（#8，已合併） | PR 2 |
 
 ## 已決定事項
 
