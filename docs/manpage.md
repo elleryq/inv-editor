@@ -1,7 +1,7 @@
 # man page 規劃
 
 > 對應 issue：[#10 加上 man page（inv-editor(1)）](https://github.com/elleryq/inv-editor/issues/10)
-> 狀態：已實作，隨 RPM（#4）之後的版本發佈；發版後確認 `man inv-editor`
+> 狀態：完成，v1.5.0 起隨 .deb 和 RPM 安裝
 
 ## 目標
 
@@ -111,5 +111,10 @@ inv-editor 1 "@DATE@" "inv-editor @VERSION@" "User Commands"
 - [x] `man -l` 顯示正常，`groff -ww` 沒有 warning
 - [x] lintian 沒有任何 warning（CI 改成 `--fail-on warning`）；rpmlint 沒有 `no-manual-page-for-binary`
 - [x] 安裝 .deb（`debian:stable`）和 RPM（`almalinux:9`）後 `man inv-editor` 可以開啟，標題行版本正確
-- [ ] 發版後從 Release 下載的套件確認一次
+- [x] 發版後從 Release 下載的套件確認一次（v1.5.0）
+
+v1.5.0 驗證結果：
+
+- 從 Release 下載的 .deb（`debian:stable`）和 RPM（`almalinux:9`）安裝後，`man -w inv-editor` 找得到 man page，`man inv-editor` 可以開啟，頁尾是 `inv-editor 1.5.0  November 2026`。
+- `fedora:latest` 容器 image 預設 `tsflags=nodocs`，不會安裝 man page；關掉 nodocs 再安裝，man page 就會裝上，但 minimal image 缺 `col`，`man` 無法顯示，直接用 groff 渲染正常。這是容器 image 的限制，一般 Fedora 系統不受影響。
 - [x] 同步測試會在漏寫 flag 時失敗（暫時拿掉 man page 裡的 `--readonly` 驗證）；拿掉 COMMANDS 裡的 `version` 也會失敗
