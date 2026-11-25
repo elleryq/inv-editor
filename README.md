@@ -38,6 +38,28 @@ sudo apt remove inv-editor
 
 There is no APT repository yet, so upgrades are done by installing the newer `.deb` the same way.
 
+### Fedora / RHEL / AlmaLinux / Rocky Linux (.rpm)
+
+`.rpm` packages for `x86_64` and `aarch64` are attached to each [release](https://github.com/elleryq/inv-editor/releases) starting from v1.5.0.
+
+```bash
+VERSION=1.5.0                        # replace with the latest release
+ARCH=$(uname -m)                     # x86_64 or aarch64
+curl -LO "https://github.com/elleryq/inv-editor/releases/download/v${VERSION}/inv-editor-${VERSION}-1.${ARCH}.rpm"
+
+# Optional: verify the checksum
+curl -LO "https://github.com/elleryq/inv-editor/releases/download/v${VERSION}/SHA256SUMS.txt"
+sha256sum --ignore-missing -c SHA256SUMS.txt
+
+sudo dnf install "./inv-editor-${VERSION}-1.${ARCH}.rpm"
+inv-editor --version
+
+# Uninstall
+sudo dnf remove inv-editor
+```
+
+The packages are not GPG-signed and there is no YUM/DNF repository yet. `dnf` prints a warning that OpenPGP checks were skipped for a local file; verify `SHA256SUMS.txt` instead. Upgrade with `sudo dnf upgrade ./inv-editor-<new-version>-1.<arch>.rpm`.
+
 ### Prebuilt binaries
 
 Each [release](https://github.com/elleryq/inv-editor/releases) also includes archives for Linux (`amd64`, `arm64`), macOS (`amd64`, `arm64`) and Windows (`amd64`). Extract `inv-editor` (or `inv-editor.exe`) and put it somewhere on your `PATH`.
@@ -245,8 +267,10 @@ inv-editor/
 ├── docs/
 │   ├── SPEC.md         # Full functional specification
 │   ├── INVENTORY-GUIDELINE.md
-│   └── packaging.md    # Debian package design notes
-├── packaging/deb/      # nfpm config and build scripts for the .deb
+│   └── packaging.md    # Linux package (.deb / .rpm) design notes
+├── packaging/          # nfpm config and build scripts for the .deb and .rpm
+│   ├── deb/            # Debian-only files (lintian overrides)
+│   └── rpm/            # RPM-only files (rpmlint config, CI check script)
 └── README.md
 ```
 

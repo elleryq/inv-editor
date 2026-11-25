@@ -1,7 +1,9 @@
-# Debian 套件打包規劃
+# Linux 套件打包（.deb / RPM）
 
-> 對應 issue：[#3 Release 的 assets 包含 debian package](https://github.com/elleryq/inv-editor/issues/3)
-> 狀態：完成，v1.4.0 起 Release 附上 .deb
+> 對應 issue：[#3 Release 的 assets 包含 debian package](https://github.com/elleryq/inv-editor/issues/3)、[#4 Release 的 assets 包含 RPM package](https://github.com/elleryq/inv-editor/issues/4)
+> 狀態：.deb 完成（v1.4.0 起）；RPM 實作中，預計 v1.5.0 起提供，見 [RPM](#rpm)
+
+前半部是 .deb 的規劃與實作紀錄（#3），[RPM](#rpm) 一節是後來加上的 RPM 支援（#4）。
 
 ## 目標
 
@@ -12,7 +14,7 @@ curl -LO https://github.com/elleryq/inv-editor/releases/download/v1.4.0/inv-edit
 sudo apt install ./inv-editor_1.4.0_amd64.deb
 ```
 
-**不在這次範圍**：自架 APT repository（`apt update` 自動更新）、套件簽章、送進 Debian/Ubuntu 官方套件庫、rpm/apk。這些放在[後續擴充](#後續擴充)。
+**不在這次範圍**：自架 APT repository（`apt update` 自動更新）、套件簽章、送進 Debian/Ubuntu 官方套件庫、rpm/apk（RPM 後來在 #4 加上）。這些放在[後續擴充](#後續擴充)。
 
 ## 現況分析
 
@@ -39,7 +41,7 @@ sudo apt install ./inv-editor_1.4.0_amd64.deb
 
 **採用 nfpm**，固定版本 `v2.49.0`。
 
-nfpm v2.49.0 本身需要 Go ≥ 1.27.4 才能編譯，比專案用的 Go 1.26 新，所以不用 `go install`，改下載官方編好的 binary。下載後用寫死在 [install-nfpm.sh](../packaging/deb/install-nfpm.sh) 裡的 SHA-256 驗證，檔案被換掉時 CI 會直接失敗。要升級 nfpm 時，同時更新版本號和兩個 hash。
+nfpm v2.49.0 本身需要 Go ≥ 1.27.4 才能編譯，比專案用的 Go 1.26 新，所以不用 `go install`，改下載官方編好的 binary。下載後用寫死在 [install-nfpm.sh](../packaging/install-nfpm.sh) 裡的 SHA-256 驗證，檔案被換掉時 CI 會直接失敗。要升級 nfpm 時，同時更新版本號和兩個 hash。
 
 ## 套件規格
 
@@ -74,16 +76,20 @@ nfpm v2.49.0 本身需要 Go ≥ 1.27.4 才能編譯，比專案用的 Go 1.26 �
 
 加上 `inv-editor version` / `--version`。版本來源依序為 ldflags 嵌入的 tag、Go 工具鏈記錄的 module 版本、`dev`；`release.yml` 在 build 時用 `-X main.version=<tag>` 嵌入。
 
-### 1. 打包檔案（`packaging/deb/`）
+### 1. 打包檔案（`packaging/`）
 
-根目錄的 `.gitignore` 忽略所有 `*.yaml`（避免誤提交使用者的 inventory），所以打包設定集中放在 `packaging/deb/`，並在 `.gitignore` 加上 `!packaging/**/*.yaml` 例外。
+根目錄的 `.gitignore` 忽略所有 `*.yaml`（避免誤提交使用者的 inventory），所以打包設定集中放在 `packaging/`，並在 `.gitignore` 加上 `!packaging/**/*.yaml` 例外。
+
+一開始（#7）這些檔案都在 `packaging/deb/`。加上 RPM（#4）後，deb 和 RPM 共用的檔案移到 `packaging/`，只剩各自專用的檔案留在子目錄：
 
 | 檔案 | 用途 |
 |---|---|
-| [nfpm.yaml](../packaging/deb/nfpm.yaml) | 套件欄位和安裝內容；`DEB_ARCH`、`DEB_VERSION` 由環境變數帶入。`version_schema: semver` 讓 nfpm 把 `1.4.0-rc1` 轉成 `1.4.0~rc1` |
-| [build.sh](../packaging/deb/build.sh) | `build.sh <binary> <tag> <arch> <out-dir>`：檢查 tag 格式與架構、把檔案放到 `build/deb/`、產生 changelog、呼叫 nfpm。CI 和 release 共用這支腳本 |
-| [install-nfpm.sh](../packaging/deb/install-nfpm.sh) | 下載固定版本的 nfpm binary 並驗證 SHA-256 |
-| [lintian-overrides](../packaging/deb/lintian-overrides) | 說明靜態編譯是刻意的 |
+| [nfpm.yaml](../packaging/nfpm.yaml) | 套件欄位和安裝內容，deb 和 RPM 共用；只屬於其中一種格式的檔案用 `packager:` 限定。`PKG_ARCH`、`PKG_VERSION` 由環境變數帶入。`version_schema: semver` 讓 nfpm 把 `1.4.0-rc1` 轉成 `1.4.0~rc1` |
+| [build.sh](../packaging/build.sh) | `build.sh <binary> <tag> <arch> <out-dir> [deb\|rpm...]`：檢查 tag、架構和格式，把檔案放到 `build/pkg/`、產生 changelog、呼叫 nfpm。CI 和 release 共用這支腳本 |
+| [install-nfpm.sh](../packaging/install-nfpm.sh) | 下載固定版本的 nfpm binary 並驗證 SHA-256 |
+| [deb/lintian-overrides](../packaging/deb/lintian-overrides) | 說明靜態編譯是刻意的 |
+| [rpm/rpmlint.toml](../packaging/rpm/rpmlint.toml) | CI 跑 rpmlint 用的設定，見 [RPM](#rpm) |
+| [rpm/check.sh](../packaging/rpm/check.sh) | CI 在 Fedora / AlmaLinux 容器裡檢查並安裝 RPM |
 
 **lintian 處理**：第一次跑 lintian 出現兩個 error 和一個 warning。
 
@@ -99,7 +105,7 @@ linux matrix 項目在 build 之後多兩個步驟：`install-nfpm.sh` 安裝 nf
 
 ### 3. 在 CI 驗證打包
 
-`ci.yml` 新增 `deb` job，amd64 跑在 `ubuntu-latest`，arm64 跑在 `ubuntu-24.04-arm`，兩種架構都實際安裝：
+`ci.yml` 新增 `deb` job（加上 RPM 後改名為 `packages`），amd64 跑在 `ubuntu-latest`，arm64 跑在 `ubuntu-24.04-arm`，兩種架構都實際安裝：
 
 1. 用 tag `v0.0.0-ci` build 執行檔並產生 .deb（套件版本 `0.0.0~ci`）。
 2. `dpkg-deb --info` / `--contents`，並確認 `Architecture` 和 `Version` 欄位。
@@ -139,10 +145,83 @@ v1.4.0 驗證結果：
 2. **不支援 armhf**：只出 `amd64` 和 `arm64`，跟現有的 linux matrix 一致。
 3. **版本號**：第一個附 .deb 的版本是 `v1.4.0`。
 
+## RPM
+
+> 對應 issue：[#4 Release 的 assets 包含 RPM package](https://github.com/elleryq/inv-editor/issues/4)
+
+### 做法
+
+沿用 .deb 的 nfpm 設定和打包腳本，`build.sh` 多接一個格式參數，release 和 CI 一次產生 deb 和 RPM。
+
+### 套件規格
+
+| 欄位 | 值 | 說明 |
+|---|---|---|
+| Name | `inv-editor` | |
+| Version | tag 去掉 `v`；`1.5.0-rc1` → `1.5.0~rc1` | 跟 deb 一樣用 `~` 讓預發版排在正式版前面 |
+| Release | `1` | nfpm 的預設值；同一個版本重新打包時才需要調整 |
+| Architecture | `x86_64`、`aarch64` | nfpm 自動把 `amd64` / `arm64` 轉成 RPM 的名稱 |
+| License | `MIT` | |
+| Summary | `Interactive editor for Ansible inventory files` | |
+| Packager | 跟 deb 的 Maintainer 相同 | |
+| Suggests | `ansible` | |
+
+**檔名**：依 RPM 慣例 `inv-editor-<version>-<release>.<arch>.rpm`，例如 `inv-editor-1.5.0-1.x86_64.rpm`。
+
+**安裝內容**：
+
+| 路徑 | 來源 | 標記 |
+|---|---|---|
+| `/usr/bin/inv-editor` | 編好的執行檔 | |
+| `/usr/share/doc/inv-editor/README.md` | `README.md` | `%doc` |
+| `/usr/share/licenses/inv-editor/LICENSE` | `LICENSE` | `%license` |
+
+deb 專用的 `copyright`、`changelog.gz`、lintian override 不會放進 RPM。RPM 的 changelog 在套件 header 的 `%changelog`，不是檔案。
+
+### changelog
+
+nfpm 的 `changelog` 設定（chglog 格式）會套用到所有格式：對 deb 會多產生 `changelog.Debian.gz`，跟 native package 應該用的 `changelog.gz` 衝突。nfpm v2.49.0 的 `changelog` 不能用 `overrides` 依格式設定，也不會展開環境變數。
+
+所以 `build.sh` 產生 `build/pkg/nfpm-rpm.yaml`，內容是 `nfpm.yaml` 再加一行 `changelog:`，只在打 RPM 時使用。`nfpm.yaml` 仍然是唯一的設定來源，deb 的產出完全不變。changelog 的版本寫成 `<version>-1`（版本加 release），跟套件的 EVR 一致。
+
+### rpmlint 處理
+
+第一次跑 rpmlint（Fedora 的 2.9.0）出現 3 個 error、3 個 warning：
+
+| 項目 | 處理 |
+|---|---|
+| E `statically-linked-binary` | 刻意的。RPM 沒有像 lintian 那樣隨套件附 override 的機制，所以在 CI 用 [rpmlint.toml](../packaging/rpm/rpmlint.toml) 過濾 |
+| E `not-listed-as-documentation`、W `no-documentation` | RPM 的 README 用 nfpm 的 `type: doc` 標成 `%doc` |
+| E `no-changelogname-tag` | 產生 `%changelog`，見上一節 |
+| W `incoherent-version-in-changelog`（加上 changelog 後出現） | changelog 版本改成 `<version>-1` |
+| W `no-manual-page-for-binary` | 由 [#10](https://github.com/elleryq/inv-editor/issues/10) 處理，見 [manpage.md](manpage.md) |
+| W `position-independent-executable-suggested` | 保留。改成 `-buildmode=pie` 會影響所有平台的 release build，超出這個 issue 的範圍 |
+
+### CI
+
+`packages` job（amd64 / arm64 兩個 runner）在 deb 的檢查之後，用 Docker 跑 [check.sh](../packaging/rpm/check.sh)：
+
+- **Fedora（latest）**：檢查 `ARCH`、`VERSION`、`%changelog`，跑 `rpmlint -c packaging/rpm/rpmlint.toml`（只擋 error），再 `dnf install`、確認 `--version` 和 `%license`、`dnf remove`。
+- **AlmaLinux 9**（RHEL 9 相容）：同樣的檢查和安裝，不跑 rpmlint。
+
+ubuntu runner 不需要另外安裝 rpm 工具；arm64 runner 用 arm64 的容器 image，等於在兩種架構上都實際安裝過。
+
+### 本機驗證
+
+- Fedora、AlmaLinux 9 安裝 `1.5.0~rc1`，再 `dnf upgrade` 到 `1.5.0`，版本正確，移除正常。
+- Fedora 的容器 image 預設 `tsflags=nodocs`，安裝後沒有 `/usr/share/doc/inv-editor`，這正好表示 README 有正確標成 `%doc`；AlmaLinux 會安裝 README。
+- deb 的內容和 lintian 結果跟 v1.4.0 相同。
+
+### 已決定事項
+
+1. **測試的發行版**：Fedora latest 和 AlmaLinux 9。執行檔是靜態編譯，沒有 glibc 版本問題，所以不逐一測 RHEL 8、openSUSE 等。
+2. **不簽章**：跟 deb 一樣先不做 GPG 簽章，使用者用 `SHA256SUMS.txt` 驗證；`dnf` 安裝本機檔案時會顯示略過 OpenPGP 檢查的 warning，README 有說明。
+3. **版本號**：第一個附 RPM 的版本是 `v1.5.0`。
+
 ## 後續擴充
 
-- **APT repository**：用 GitHub Pages 加 `reprepro` 或 `aptly` 架設，需要 GPG 簽章金鑰和保管流程，使用者才能 `apt update` 自動更新。
-- **rpm / apk**：nfpm 的 `--packager rpm` / `apk`，用同一份 `nfpm.yaml`（changelog 和 lintian override 只適用 deb，要另外處理）。
-- **man page**：從 `helpText` 產生 `inv-editor.1`，安裝到 `/usr/share/man/man1/`。
+- **APT / YUM repository**：用 GitHub Pages 加 `reprepro`、`aptly` 或 `createrepo_c` 架設，需要 GPG 簽章金鑰和保管流程，使用者才能 `apt update` / `dnf upgrade` 自動更新。
+- **apk**：nfpm 的 `--packager apk`，用同一份 `nfpm.yaml`。
+- **man page**：[#10](https://github.com/elleryq/inv-editor/issues/10)，規劃見 [manpage.md](manpage.md)。
 - **shell completion**：目前子命令很少，需求不高。
 - **systemd unit**：如果有人要把 `serve --readonly` 當常駐服務，可以附一個停用狀態的範本 unit。

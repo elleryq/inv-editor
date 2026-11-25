@@ -1,0 +1,7 @@
+# rpmlint configuration used by CI (rpmlint -c packaging/rpm/rpmlint.toml).
+# Unlike lintian, rpmlint has no override file that ships inside the package,
+# so intentional findings are filtered here.
+Filters = [
+  # Go binaries are built with CGO_ENABLED=0 and are statically linked on purpose.
+  'statically-linked-binary',
+]
