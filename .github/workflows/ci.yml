@@ -90,6 +90,16 @@ jobs:
       - name: Build .deb and .rpm
         run: packaging/build.sh build/inv-editor "$TAG" "$PKG_ARCH" build/out deb rpm
 
+      # groff exits 0 even when it warns, so fail on any output.
+      - name: Check man page
+        run: |
+          warnings="$(zcat build/pkg/inv-editor.1.gz | groff -man -Tutf8 -ww -z 2>&1)"
+          if [ -n "$warnings" ]; then
+            echo "$warnings"
+            exit 1
+          fi
+          zcat build/pkg/inv-editor.1.gz | grep -q '^\.TH inv-editor 1 .*"inv-editor 0\.0\.0-ci"'
+
       - name: Inspect .deb
         run: |
           deb="build/out/inv-editor_0.0.0~ci_${PKG_ARCH}.deb"
@@ -102,13 +112,14 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq lintian
-          lintian --fail-on error build/out/*.deb
+          lintian --fail-on warning build/out/*.deb
 
       - name: Install, run and remove .deb
         run: |
           sudo apt-get install -y "./build/out/inv-editor_0.0.0~ci_${PKG_ARCH}.deb"
           test "$(inv-editor --version)" = "inv-editor 0.0.0-ci"
           inv-editor --help > /dev/null
+          test "$(man -w inv-editor)" = /usr/share/man/man1/inv-editor.1.gz
           sudo apt-get remove -y inv-editor
           test ! -e /usr/bin/inv-editor
 

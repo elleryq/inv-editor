@@ -9,7 +9,8 @@
 # Output names follow each format's convention:
 #   inv-editor_<version>_<arch>.deb        (1.4.0-rc1 -> 1.4.0~rc1)
 #   inv-editor-<version>-1.<rpmarch>.rpm   (amd64 -> x86_64, arm64 -> aarch64)
-# Requires nfpm on PATH (see install-nfpm.sh). Run from the repository root.
+# Requires nfpm on PATH (see install-nfpm.sh) and Go (for go tool go-md2man).
+# Run from the repository root.
 set -euo pipefail
 
 usage="usage: build.sh <binary> <tag> <arch> <out-dir> [deb|rpm...]"
@@ -51,6 +52,14 @@ release_url="https://github.com/elleryq/inv-editor/releases/tag/${tag}"
 # Changelogs are dated by the release commit so rebuilds are reproducible.
 commit_date_rfc2822="$(git log -1 --format=%aD 2>/dev/null || date -R)"
 commit_date_iso="$(git log -1 --format=%aI 2>/dev/null || date -Iseconds)"
+
+# Man page: docs/man/inv-editor.1.md -> roff via go-md2man (a tool dependency
+# pinned in go.mod). The title line shows the version and the release
+# commit's month, e.g. "November 2026".
+man_date="$(LC_ALL=C git log -1 --format=%cd --date=format:'%B %Y' 2>/dev/null || LC_ALL=C date +'%B %Y')"
+sed -e "s/@VERSION@/${version}/" -e "s/@DATE@/${man_date}/" docs/man/inv-editor.1.md \
+  | go tool go-md2man > "$stage/inv-editor.1"
+gzip -9n "$stage/inv-editor.1"
 
 # Debian: minimal native-package changelog, shipped as
 # /usr/share/doc/inv-editor/changelog.gz (see nfpm.yaml).

@@ -1,7 +1,7 @@
 # man page 規劃
 
 > 對應 issue：[#10 加上 man page（inv-editor(1)）](https://github.com/elleryq/inv-editor/issues/10)
-> 狀態：規劃完成，待實作
+> 狀態：已實作，隨 RPM（#4）之後的版本發佈；發版後確認 `man inv-editor`
 
 ## 目標
 
@@ -39,7 +39,7 @@ go-md2man 最新版是 v2.0.7，`go.mod` 宣告 `go 1.12`，不會碰到 nfpm �
 | 檔案 | 說明 |
 |---|---|
 | `docs/man/inv-editor.1.md` | man page 原始檔，進版控 |
-| `build/man/inv-editor.1.gz` | 打包時產生，不進版控（`build/` 已被忽略） |
+| `build/pkg/inv-editor.1.gz` | 打包時產生，不進版控（`build/` 已被忽略） |
 
 產生出來的 roff 檔不進版控，避免原始檔和產物不同步。
 
@@ -48,7 +48,7 @@ go-md2man 最新版是 v2.0.7，`go.mod` 宣告 `go 1.12`，不會碰到 nfpm �
 | 段落 | 內容 |
 |---|---|
 | NAME | `inv-editor - interactive editor for Ansible inventory files` |
-| SYNOPSIS | `inv-editor` *file*、`inv-editor serve` *file* [*options*]、`inv-editor help`、`inv-editor version` |
+| SYNOPSIS | `inv-editor` *file*、`inv-editor serve` [*options*] *file*（見[實作時發現的問題](#實作時發現的問題)）、`inv-editor help`、`inv-editor version` |
 | DESCRIPTION | 兩種模式（TUI、web）；檔案不存在時從空 inventory 開始 |
 | COMMANDS | 無子命令（TUI）、`serve`、`help`、`version` |
 | OPTIONS | `serve` 的 `--host`、`--port`、`--readonly` |
@@ -84,14 +84,20 @@ inv-editor 1 "@DATE@" "inv-editor @VERSION@" "User Commands"
 1. **加 tool 依賴**：`go get -tool github.com/cpuguy83/go-md2man/v2@v2.0.7`，確認 `go mod tidy` 和 CI 的 `go mod tidy -diff` 都通過。
 2. **撰寫 `docs/man/inv-editor.1.md`**，並修正 `--help`、README、SPEC。
 3. **同步測試**：加上上面第 3 點的測試。
-4. **打包**：打包腳本先產生 `build/man/inv-editor.1.gz`（替換版本和日期 → `go tool go-md2man` → `gzip -9n`），nfpm 設定加一筆 contents，deb 和 RPM 共用。
+4. **打包**：打包腳本先產生 `build/pkg/inv-editor.1.gz`（替換版本和日期 → `go tool go-md2man` → `gzip -9n`），nfpm 設定加上 contents（deb 和 RPM 各一筆，見下方「實作時發現的問題」）。
 5. **CI 檢查**：
-   - `MANWIDTH=80 man --warnings -E UTF-8 -l build/man/inv-editor.1.gz > /dev/null`，有 groff warning 就失敗
-   - `deb` job 的 lintian 不再出現 `no-manual-page`，並把 lintian 改成 `--fail-on warning`，之後有新 warning 也會被擋下
+   - `groff -man -Tutf8 -ww -z`，有任何輸出就失敗（groff 遇到 warning 仍然回傳 0，`man --warnings` 也會把整頁輸出混在一起，不適合拿來判斷）
+   - `packages` job 的 lintian 不再出現 `no-manual-page`，並把 lintian 改成 `--fail-on warning`，之後有新 warning 也會被擋下
    - 安裝後確認 `man -w inv-editor` 找得到 man page
 6. **更新文件**：`docs/packaging.md` 的後續擴充移除 man page，改為已完成。
 
 依賴 #4 的打包調整，所以在 #4 之後實作，PR 疊在 #4 的分支上。
+
+## 實作時發現的問題
+
+- **`serve` 放在檔案後面的 flag 會被忽略**：Go 的 `flag` 套件在第一個非 flag 參數停止解析，`inv-editor serve vc8.yaml --readonly` 實際上會以可寫入模式跑在 8080。原本 `--help` 和 README 的範例都是這種寫法。已在 #14 修正，現在 flag 放在檔案前後都可以；man page、`--help` 和 README 的範例統一寫成 flag 在前，並註明 1.5.0 之前的版本會忽略放在後面的 flag。
+- **nfpm 的 deb 不收 `type: doc`**：man page 要依格式各寫一筆 contents，RPM 那筆才標 `type: doc`。
+- **Ubuntu 容器 image 無法測 `man`**：minimized image 把 `man` 換成提示訊息，本機改用 `debian:stable`（非 slim）測試；GitHub 的 ubuntu runner 是完整系統，不受影響。
 
 ## 已決定事項
 
@@ -102,7 +108,8 @@ inv-editor 1 "@DATE@" "inv-editor @VERSION@" "User Commands"
 
 ## 驗證
 
-- [ ] `man -l build/man/inv-editor.1.gz` 顯示正常，沒有 groff warning
-- [ ] lintian 沒有 `no-manual-page`
-- [ ] 安裝 .deb / RPM 後 `man inv-editor` 可以開啟，標題行版本正確
-- [ ] 同步測試會在漏寫 flag 時失敗（暫時拿掉 man page 裡的 `--readonly` 驗證）
+- [x] `man -l` 顯示正常，`groff -ww` 沒有 warning
+- [x] lintian 沒有任何 warning（CI 改成 `--fail-on warning`）；rpmlint 沒有 `no-manual-page-for-binary`
+- [x] 安裝 .deb（`debian:stable`）和 RPM（`almalinux:9`）後 `man inv-editor` 可以開啟，標題行版本正確
+- [ ] 發版後從 Release 下載的套件確認一次
+- [x] 同步測試會在漏寫 flag 時失敗（暫時拿掉 man page 裡的 `--readonly` 驗證）；拿掉 COMMANDS 裡的 `version` 也會失敗

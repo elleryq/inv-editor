@@ -69,6 +69,7 @@ nfpm v2.49.0 本身需要 Go ≥ 1.27.4 才能編譯，比專案用的 Go 1.26 �
 | `/usr/share/doc/inv-editor/changelog.gz` | 打包時產生 | 0644 |
 | `/usr/share/doc/inv-editor/README.md` | `README.md` | 0644 |
 | `/usr/share/lintian/overrides/inv-editor` | `packaging/deb/lintian-overrides` | 0644 |
+| `/usr/share/man/man1/inv-editor.1.gz` | 由 `docs/man/inv-editor.1.md` 產生（#10） | 0644 |
 
 ## 實作步驟
 
@@ -95,7 +96,7 @@ nfpm v2.49.0 本身需要 Go ≥ 1.27.4 才能編譯，比專案用的 Go 1.26 �
 
 - `no-changelog`：Debian policy 要求 native package 附 `changelog.gz`。`build.sh` 產生一份最小的 Debian changelog，日期用 release commit 的時間，重新 build 也會得到相同內容。
 - `statically-linked-binary`：Go 用 `CGO_ENABLED=0` 刻意靜態編譯。比照 Debian 的 Go 套件，附 lintian override。
-- `no-manual-page`（warning）：先保留，man page 列在[後續擴充](#後續擴充)。
+- `no-manual-page`（warning）：當時先保留，後來由 #10 加上 man page 解決，見 [manpage.md](manpage.md)。
 
 ### 2. 修改 `release.yml`
 
@@ -109,7 +110,7 @@ linux matrix 項目在 build 之後多兩個步驟：`install-nfpm.sh` 安裝 nf
 
 1. 用 tag `v0.0.0-ci` build 執行檔並產生 .deb（套件版本 `0.0.0~ci`）。
 2. `dpkg-deb --info` / `--contents`，並確認 `Architecture` 和 `Version` 欄位。
-3. `lintian --fail-on error`（warning 不擋）。
+3. `lintian --fail-on error`（warning 不擋）。加上 man page（#10）後沒有任何 warning，改成 `--fail-on warning`。
 4. `apt-get install` 安裝，確認 `inv-editor --version` 輸出 `inv-editor 0.0.0-ci`、`--help` 正常，再 `apt-get remove` 並確認執行檔已移除。
 
 ### 4. 更新文件
@@ -175,6 +176,7 @@ v1.4.0 驗證結果：
 | `/usr/bin/inv-editor` | 編好的執行檔 | |
 | `/usr/share/doc/inv-editor/README.md` | `README.md` | `%doc` |
 | `/usr/share/licenses/inv-editor/LICENSE` | `LICENSE` | `%license` |
+| `/usr/share/man/man1/inv-editor.1.gz` | 由 `docs/man/inv-editor.1.md` 產生（#10） | `%doc` |
 
 deb 專用的 `copyright`、`changelog.gz`、lintian override 不會放進 RPM。RPM 的 changelog 在套件 header 的 `%changelog`，不是檔案。
 
@@ -194,7 +196,7 @@ nfpm 的 `changelog` 設定（chglog 格式）會套用到所有格式：對 deb
 | E `not-listed-as-documentation`、W `no-documentation` | RPM 的 README 用 nfpm 的 `type: doc` 標成 `%doc` |
 | E `no-changelogname-tag` | 產生 `%changelog`，見上一節 |
 | W `incoherent-version-in-changelog`（加上 changelog 後出現） | changelog 版本改成 `<version>-1` |
-| W `no-manual-page-for-binary` | 由 [#10](https://github.com/elleryq/inv-editor/issues/10) 處理，見 [manpage.md](manpage.md) |
+| W `no-manual-page-for-binary` | 由 [#10](https://github.com/elleryq/inv-editor/issues/10) 加上 man page 解決，見 [manpage.md](manpage.md) |
 | W `position-independent-executable-suggested` | 保留。改成 `-buildmode=pie` 會影響所有平台的 release build，超出這個 issue 的範圍 |
 
 ### CI
@@ -222,6 +224,5 @@ ubuntu runner 不需要另外安裝 rpm 工具；arm64 runner 用 arm64 的容�
 
 - **APT / YUM repository**：用 GitHub Pages 加 `reprepro`、`aptly` 或 `createrepo_c` 架設，需要 GPG 簽章金鑰和保管流程，使用者才能 `apt update` / `dnf upgrade` 自動更新。
 - **apk**：nfpm 的 `--packager apk`，用同一份 `nfpm.yaml`。
-- **man page**：[#10](https://github.com/elleryq/inv-editor/issues/10)，規劃見 [manpage.md](manpage.md)。
 - **shell completion**：目前子命令很少，需求不高。
 - **systemd unit**：如果有人要把 `serve --readonly` 當常駐服務，可以附一個停用狀態的範本 unit。

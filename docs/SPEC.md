@@ -112,6 +112,10 @@ The Variables panel shows:
 
 ## Keyboard Reference
 
+The authoritative, up-to-date key list is the man page source
+[`docs/man/inv-editor.1.md`](man/inv-editor.1.md) (section TUI KEYS); the
+tables below describe the original design.
+
 ### Global
 | Key | Action |
 |-----|--------|
@@ -121,13 +125,24 @@ The Variables panel shows:
 | `V` | Jump focus to Variables panel |
 | `s` | Save to original file |
 | `x` | Export: prompt for format and path |
-| `q` | Quit (warn if unsaved changes) |
+| `i` | Import: prompt for a file path and merge it into the current inventory |
+| `/` | Search (see below) |
+| `Esc` | Clear the search filter, or else the copy/move clipboard |
+| `q` / `Ctrl+C` | Quit (warn if unsaved changes) |
 | `?` | Toggle help overlay |
+
+### Search
+- `/` opens a query prompt in the status bar; the lists are filtered as you type.
+- A plain query is a Go regular expression matched against group and host names.
+- `key=pattern` matches hosts whose variable `key` has a value matching the regular expression `pattern`.
+- `Enter` keeps the filter and focuses the Groups panel; `Esc` clears it; `Backspace` deletes a character.
+- While the query is not a valid regular expression, the status bar shows `invalid regex` and nothing is filtered.
 
 ### Within a Panel
 | Key | Action |
 |-----|--------|
 | `↑` / `↓` or `j` / `k` | Navigate items |
+| `Shift+←` / `Shift+→` | Scroll the panel horizontally |
 | `n` | New item (group / host / variable) |
 | `e` or `Enter` | Edit/rename selected item |
 | `d` or `Delete` | Delete selected item (with confirmation) |

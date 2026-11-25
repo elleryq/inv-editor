@@ -28,6 +28,21 @@ contents:
     dst: /usr/bin/inv-editor
     file_info:
       mode: 0755
+  # Man page, generated from docs/man/inv-editor.1.md. Listed once per
+  # packager: nfpm's deb packager drops "type: doc" entries, while for RPM
+  # the page is marked %doc so --excludedocs / tsflags=nodocs skip it, as
+  # rpmbuild does for man pages.
+  - src: ./build/pkg/inv-editor.1.gz
+    dst: /usr/share/man/man1/inv-editor.1.gz
+    packager: deb
+    file_info:
+      mode: 0644
+  - src: ./build/pkg/inv-editor.1.gz
+    dst: /usr/share/man/man1/inv-editor.1.gz
+    packager: rpm
+    type: doc
+    file_info:
+      mode: 0644
   # Debian: everything under /usr/share/doc is documentation by convention,
   # and the license goes to the policy-mandated copyright file.
   - src: ./README.md

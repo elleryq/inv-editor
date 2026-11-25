@@ -93,13 +93,17 @@ inv-editor new-inventory.ini
 
 # Web interface
 inv-editor serve vc8.yaml                            # default: 127.0.0.1:8080
-inv-editor serve vc8.yaml --port 9090
-inv-editor serve vc8.yaml --host 127.0.0.1           # local only
-inv-editor serve vc8.yaml --host 0.0.0.0 --readonly  # read-only mode
+inv-editor serve --port 9090 vc8.yaml
+inv-editor serve --host 127.0.0.1 vc8.yaml           # local only
+inv-editor serve --host 0.0.0.0 --readonly vc8.yaml  # read-only mode
 
 # Show version
 inv-editor --version
 ```
+
+`serve` flags can go before or after the inventory file. Versions before v1.5.0 silently ignore flags placed after the file, so put them first if you use an older release.
+
+The `.deb` and `.rpm` packages install a manual page: `man inv-editor`.
 
 ## TUI Controls
 
@@ -108,6 +112,8 @@ inv-editor --version
 | `Tab` / `Shift+Tab` | Cycle between panels (Groups → Hosts → Variables) |
 | `G` / `H` / `V` | Jump directly to Groups / Hosts / Variables panel |
 | `↑` `↓` or `j` `k` | Navigate items in current panel |
+| `→` / `l`, `←` / `h` | Expand / collapse the selected group (Groups panel); `←` on a collapsed group jumps to its parent |
+| `Shift+←` / `Shift+→` | Scroll the focused panel horizontally |
 | `n` | New item — group, host (hostname + optional IP, stored as `ansible_host`), or variable |
 | `e` / `Enter` | Edit selected item |
 | `d` / `Delete` | Delete selected item |
@@ -115,12 +121,13 @@ inv-editor --version
 | `c` | Mark the selected host(s) — or current group — to **copy** |
 | `m` | Mark the selected host(s) — or current group — to **move** |
 | `p` | Paste the marked host(s)/group into the group currently selected in the Groups panel |
-| `Esc` | Clear a pending copy/move clipboard |
+| `/` | Search: a regular expression matched against group and host names, or `key=pattern` to match hosts by variable value. `Enter` keeps the filter, `Esc` clears it |
+| `Esc` | Clear the search filter, or else a pending copy/move clipboard |
 | `v` | Open variables for selected group or host |
 | `s` | Save to original file |
 | `x` | Export to a different format/path |
 | `i` | Import another inventory file and merge it into the current one |
-| `q` | Quit (Save & Quit / Discard / Cancel if unsaved changes) |
+| `q` / `Ctrl+C` | Quit (Save & Quit / Discard / Cancel if unsaved changes) |
 | `?` | Toggle help overlay |
 
 ### Copy / Move workflow
