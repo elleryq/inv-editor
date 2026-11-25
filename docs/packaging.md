@@ -1,7 +1,7 @@
 # Debian 套件打包規劃
 
 > 對應 issue：[#3 Release 的 assets 包含 debian package](https://github.com/elleryq/inv-editor/issues/3)
-> 狀態：實作中（PR 1 已完成，PR 2 進行中）
+> 狀態：實作中（PR 1、PR 2 已完成，PR 3 進行中），待 v1.4.0 發版驗證
 
 ## 目標
 
@@ -124,10 +124,8 @@ linux matrix 項目在 build 之後多兩個步驟：`install-nfpm.sh` 安裝 nf
 | PR | 內容 | 依賴 |
 |---|---|---|
 | 1 | 加 `--version`，`release.yml` 嵌入版本號（#6，已合併） | 無 |
-| 2 | 新增 `packaging/deb/`、`release.yml` 打包步驟、`ci.yml` 驗證 job | PR 1 |
+| 2 | 新增 `packaging/deb/`、`release.yml` 打包步驟、`ci.yml` 驗證 job（#7，已合併） | PR 1 |
 | 3 | README 安裝說明與 `go install` 路徑修正 | PR 2 |
-
-PR 2 和 PR 3 可以合併成一個。
 
 ## 已決定事項
 
