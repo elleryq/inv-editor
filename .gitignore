@@ -26,3 +26,4 @@ build/
 # Release build artifacts (see .github/workflows/release.yml)
 /inv-editor
 /inv-editor_*.deb
+/inv-editor-*.rpm

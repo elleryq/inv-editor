@@ -49,20 +49,23 @@ jobs:
       - name: Test
         run: go test -race ./...
 
-  deb:
-    name: Debian package (${{ matrix.arch }})
+  packages:
+    name: Linux packages (${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - arch: amd64
+            rpm_arch: x86_64
             runner: ubuntu-latest
           - arch: arm64
+            rpm_arch: aarch64
             runner: ubuntu-24.04-arm
     env:
       TAG: v0.0.0-ci
-      DEB_ARCH: ${{ matrix.arch }}
+      PKG_ARCH: ${{ matrix.arch }}
+      RPM_ARCH: ${{ matrix.rpm_arch }}
 
     steps:
       - uses: actions/checkout@v7
@@ -81,18 +84,18 @@ jobs:
 
       - name: Install nfpm
         run: |
-          packaging/deb/install-nfpm.sh "$RUNNER_TEMP/bin"
+          packaging/install-nfpm.sh "$RUNNER_TEMP/bin"
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
 
-      - name: Build .deb
-        run: packaging/deb/build.sh build/inv-editor "$TAG" "$DEB_ARCH" build/out
+      - name: Build .deb and .rpm
+        run: packaging/build.sh build/inv-editor "$TAG" "$PKG_ARCH" build/out deb rpm
 
-      - name: Inspect package
+      - name: Inspect .deb
         run: |
-          deb="build/out/inv-editor_0.0.0~ci_${DEB_ARCH}.deb"
+          deb="build/out/inv-editor_0.0.0~ci_${PKG_ARCH}.deb"
           dpkg-deb --info "$deb"
           dpkg-deb --contents "$deb"
-          test "$(dpkg-deb --field "$deb" Architecture)" = "$DEB_ARCH"
+          test "$(dpkg-deb --field "$deb" Architecture)" = "$PKG_ARCH"
           test "$(dpkg-deb --field "$deb" Version)" = "0.0.0~ci"
 
       - name: Lintian
@@ -101,10 +104,23 @@ jobs:
           sudo apt-get install -y -qq lintian
           lintian --fail-on error build/out/*.deb
 
-      - name: Install, run and remove
+      - name: Install, run and remove .deb
         run: |
-          sudo apt-get install -y "./build/out/inv-editor_0.0.0~ci_${DEB_ARCH}.deb"
+          sudo apt-get install -y "./build/out/inv-editor_0.0.0~ci_${PKG_ARCH}.deb"
           test "$(inv-editor --version)" = "inv-editor 0.0.0-ci"
           inv-editor --help > /dev/null
           sudo apt-get remove -y inv-editor
           test ! -e /usr/bin/inv-editor
+
+      # Fedora: inspect, rpmlint, install. AlmaLinux 9 (RHEL-compatible): install.
+      - name: Check .rpm on Fedora
+        run: |
+          docker run --rm -v "$PWD:/src:ro" -w /src fedora:latest \
+            packaging/rpm/check.sh "build/out/inv-editor-0.0.0~ci-1.${RPM_ARCH}.rpm" \
+            "$RPM_ARCH" 0.0.0~ci 0.0.0-ci lint
+
+      - name: Check .rpm on AlmaLinux 9
+        run: |
+          docker run --rm -v "$PWD:/src:ro" -w /src almalinux:9 \
+            packaging/rpm/check.sh "build/out/inv-editor-0.0.0~ci-1.${RPM_ARCH}.rpm" \
+            "$RPM_ARCH" 0.0.0~ci 0.0.0-ci

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Download a pinned nfpm release binary, verify its SHA-256, and install it.
-# Usage: packaging/deb/install-nfpm.sh <install-dir>
+# Usage: packaging/install-nfpm.sh <install-dir>
 set -euo pipefail
 
 NFPM_VERSION=2.49.0

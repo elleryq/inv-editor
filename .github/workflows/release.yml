@@ -49,25 +49,25 @@ jobs:
       - name: Install nfpm
         if: matrix.goos == 'linux'
         run: |
-          packaging/deb/install-nfpm.sh "$RUNNER_TEMP/bin"
+          packaging/install-nfpm.sh "$RUNNER_TEMP/bin"
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
 
       # Written to the workspace root next to the archive so that
       # upload-artifact keeps a flat layout for the release job.
-      - name: Build .deb
+      - name: Build .deb and .rpm
         if: matrix.goos == 'linux'
         env:
           TAG: ${{ github.ref_name }}
-          DEB_ARCH: ${{ matrix.goarch }}
-        run: packaging/deb/build.sh inv-editor "$TAG" "$DEB_ARCH" .
+          PKG_ARCH: ${{ matrix.goarch }}
+        run: packaging/build.sh inv-editor "$TAG" "$PKG_ARCH" . deb rpm
 
       - name: Package archive
         id: archive
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
+          TAG: ${{ github.ref_name }}
         run: |
-          TAG="${{ github.ref_name }}"
           BASE="inv-editor-${TAG}-${GOOS}-${GOARCH}"
           if [ "$GOOS" = "windows" ]; then
             zip "${BASE}.zip" inv-editor.exe
@@ -83,6 +83,7 @@ jobs:
           path: |
             ${{ steps.archive.outputs.file }}
             inv-editor_*.deb
+            inv-editor-*.rpm
           if-no-files-found: error
 
   release:
